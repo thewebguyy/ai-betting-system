@@ -1,0 +1,67 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "main.py",
+            "use": "@vercel/python"
+        },
+        {
+            "src": "dashboard/package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "build"
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/auth/token",
+            "dest": "main.py"
+        },
+        {
+            "src": "/health",
+            "dest": "main.py"
+        },
+        {
+            "src": "/odds(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/value-bets(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/analytics(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/bankroll(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/bets(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/matches(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/reports(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/ws/(.*)",
+            "dest": "main.py"
+        },
+        {
+            "src": "/static/(.*)",
+            "dest": "/dashboard/static/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/dashboard/$1",
+            "check": true
+        }
+    ]
+}
