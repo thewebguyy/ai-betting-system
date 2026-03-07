@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+env/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environment
+.env
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+
+# Database files
+db/*.db
+db/*.sqlite
+db/*.sqlite3
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Node / Frontend
+dashboard/node_modules/
+dashboard/build/
+dashboard/.pnp
+dashboard/.pnp.js
+dashboard/coverage/
+dashboard/.env.local
+dashboard/.env.development.local
+dashboard/.env.test.local
+dashboard/.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright-report/
+test-results/
+playwright/.auth/
+
+# Models / caches
+models/cache/
+models/*.pkl
+models/*.joblib
+*.npy
+
+# Reports (generated)
+reports/
+
+# Docker volumes
+.dockerdata/
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
