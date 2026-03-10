@@ -13,17 +13,14 @@
         {
             "source": "/(auth|health|odds|value-bets|analytics|bankroll|bets|matches|reports)(.*)",
             "destination": "https://ai-betting-system-production.up.railway.app/$1$2"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/static/(.*)",
-            "dest": "/dashboard/static/$1"
         },
         {
-            "src": "/(.*)",
-            "dest": "/dashboard/$1",
-            "check": true
+            "source": "/static/(.*)",
+            "destination": "/dashboard/static/$1"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/dashboard/index.html"
         }
     ]
 }

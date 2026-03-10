@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname.includes('vercel.app') 
-    ? 'https://ai-betting-system-production.up.railway.app' 
+    ? ''  // Use relative path for Vercel/Railway proxy
     : 'http://localhost:8000');
 
 
