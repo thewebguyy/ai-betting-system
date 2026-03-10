@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-const WS_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
-    .replace('http', 'ws') + '/ws/alerts';
+const WS_BASE = process.env.REACT_APP_API_URL || (window.location.hostname.includes('vercel.app') 
+    ? 'https://ai-betting-system-production.up.railway.app' 
+    : 'http://localhost:8000');
+
+const WS_URL = WS_BASE.replace('http', 'ws') + '/ws/alerts';
+
 
 export function useWebSocket() {
     const [alerts, setAlerts] = useState([]);
