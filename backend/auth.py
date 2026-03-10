@@ -50,4 +50,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
 
 def authenticate_user(username: str, password: str) -> bool:
     """Check admin credentials (personal single-user mode)."""
-    return username == settings.admin_username and password == settings.admin_password
+    is_valid = (username == settings.admin_username and password == settings.admin_password)
+    if not is_valid:
+        from loguru import logger
+        logger.warning(f"Failed login attempt for username: {username}")
+    return is_valid

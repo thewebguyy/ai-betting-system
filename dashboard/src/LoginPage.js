@@ -15,7 +15,13 @@ export default function LoginPage() {
         try {
             await login(username, password);
         } catch (err) {
-            setError('Invalid credentials. Check your .env ADMIN_USERNAME / ADMIN_PASSWORD.');
+            if (err.response?.status === 401) {
+                setError('Invalid credentials. Double-check ADMIN_USERNAME and ADMIN_PASSWORD in Railway.');
+            } else if (!err.response) {
+                setError(`Connection failed. Ensure backend is running at ${err.config?.baseURL}`);
+            } else {
+                setError(`Login failed: ${err.response?.data?.detail || err.message}`);
+            }
         } finally {
             setLoading(false);
         }
