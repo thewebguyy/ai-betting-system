@@ -11,15 +11,19 @@
     ],
     "rewrites": [
         {
-            "source": "/(auth|health|odds|value-bets|analytics|bankroll|bets|matches|reports)(.*)",
-            "destination": "https://ai-betting-system-production.up.railway.app/$1$2"
+            "source": "/(auth|health|odds|value-bets|analytics|bankroll|bets|matches|reports)",
+            "destination": "https://ai-betting-system-production.up.railway.app/$1"
         },
         {
-            "source": "/static/(.*)",
-            "destination": "/dashboard/static/$1"
+            "source": "/(auth|health|odds|value-bets|analytics|bankroll|bets|matches|reports)/:path*",
+            "destination": "https://ai-betting-system-production.up.railway.app/$1/:path*"
         },
         {
-            "source": "/(.*)",
+            "source": "/static/:path*",
+            "destination": "/dashboard/static/:path*"
+        },
+        {
+            "source": "/:path*",
             "destination": "/dashboard/index.html"
         }
     ]

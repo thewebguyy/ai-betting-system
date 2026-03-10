@@ -33,10 +33,10 @@ api.interceptors.response.use(
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const login = async (username, password) => {
-    const form = new FormData();
-    form.append('username', username);
-    form.append('password', password);
-    const res = await api.post('/auth/token', form);
+    const params = new URLSearchParams();
+    params.append('username', username);
+    params.append('password', password);
+    const res = await api.post('/auth/token', params);
     localStorage.setItem('access_token', res.data.access_token);
     return res.data;
 };
