@@ -27,14 +27,22 @@ _odds_api_calls: list[float] = []
 
 BASE_HEADERS_RAPIDAPI = {
     "X-RapidAPI-Key": settings.api_football_key,
-    "X-RapidAPI-Host": "v3.football.api-sports.io",
+    "X-RapidAPI-Host": settings.rapidapi_host_football,
     "User-Agent": ua.random,
 }
 
 FOOTBALL_DATA_BASE = "https://api.football-data.org/v4"
 SPORTSDB_BASE = "https://www.thesportsdb.com/api/v1/json"
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
-API_FOOTBALL_BASE = "https://v3.football.api-sports.io"
+# Base URL depends on the host — if it's api-sports, use their specific domain
+API_FOOTBALL_BASE = f"https://{settings.rapidapi_host_football}"
+
+
+def get_active_source() -> str:
+    """Determine which API provider is active based on host."""
+    if "sportapi7" in settings.rapidapi_host_football:
+        return "sportapi7"
+    return "api_football"
 
 
 def _check_rate(calls_list: list[float], limit: int, window: int = 3600) -> bool:
@@ -48,16 +56,26 @@ def _check_rate(calls_list: list[float], limit: int, window: int = 3600) -> bool
     return True
 
 
-# ─── API-Football ─────────────────────────────────────────────────────────────
+# ─── Football Data Fetcher (Multi-Provider) ───────────────────────────────────
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def fetch_fixtures(league_id: int = 39, season: int = 2024) -> list[dict]:
-    """Fetch upcoming fixtures from API-Football (free: 100 req/day)."""
+    """Fetch upcoming fixtures (supports API-Football and SportAPI)."""
     if not settings.api_football_key:
         logger.warning("API_FOOTBALL_KEY not set — returning empty fixtures.")
         return []
     if not _check_rate(_api_football_calls, 95, 86400):
         return []
 
+    # Case A: SportAPI (sportapi7.p.rapidapi.com)
+    if "sportapi7" in settings.rapidapi_host_football:
+        from datetime import datetime
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        url = f"{API_FOOTBALL_BASE}/api/v1/sport/1/scheduled-events/{date_str}"
+        resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, timeout=15)
+        resp.raise_for_status()
+        return resp.json().get("events", [])
+
+    # Case B: Standard API-Football
     url = f"{API_FOOTBALL_BASE}/fixtures"
     params = {"league": league_id, "season": season, "status": "NS"}
     resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, params=params, timeout=15)
@@ -112,26 +130,42 @@ def fetch_head_to_head(home_id: int, away_id: int, last: int = 10) -> list[dict]
 # ─── The Odds API ─────────────────────────────────────────────────────────────
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def fetch_odds_api(sport: str = "soccer_epl", regions: str = "uk,eu,us", markets: str = "h2h") -> list[dict]:
-    """Fetch odds from multiple bookmakers via The Odds API (500 req/mo free)."""
-    if not settings.odds_api_key:
-        logger.warning("ODDS_API_KEY not set — returning empty odds.")
-        return []
-    if not _check_rate(_odds_api_calls, 470, 2592000):  # ~500/month
-        return []
+    """Fetch odds (supports The Odds API and SportAPI fallback)."""
+    # 1. Try The Odds API if key exists
+    if settings.odds_api_key:
+        if _check_rate(_odds_api_calls, 470, 2592000):  # ~500/month
+            try:
+                url = f"{ODDS_API_BASE}/sports/{sport}/odds"
+                params = {
+                    "apiKey": settings.odds_api_key,
+                    "regions": regions,
+                    "markets": markets,
+                    "oddsFormat": "decimal",
+                    "dateFormat": "iso",
+                }
+                resp = requests.get(url, params=params, timeout=15)
+                resp.raise_for_status()
+                remaining = resp.headers.get("x-requests-remaining", "?")
+                logger.info(f"Odds API requests remaining: {remaining}")
+                return resp.json()
+            except Exception as e:
+                logger.error(f"The Odds API error: {e}")
 
-    url = f"{ODDS_API_BASE}/sports/{sport}/odds"
-    params = {
-        "apiKey": settings.odds_api_key,
-        "regions": regions,
-        "markets": markets,
-        "oddsFormat": "decimal",
-        "dateFormat": "iso",
-    }
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    remaining = resp.headers.get("x-requests-remaining", "?")
-    logger.info(f"Odds API requests remaining: {remaining}")
-    return resp.json()
+    # 2. Try SportAPI if configured
+    if "sportapi7" in settings.rapidapi_host_football:
+        try:
+            from datetime import datetime
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            url = f"{API_FOOTBALL_BASE}/api/v1/sport/1/odds/{date_str}"
+            resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, timeout=15)
+            resp.raise_for_status()
+            # Note: SportAPI returns a different format; needs mapping in scraper
+            return resp.json().get("odds", [])
+        except Exception as e:
+            logger.error(f"SportAPI odds error: {e}")
+
+    logger.warning("No valid odds source found (API keys missing or limits reached).")
+    return []
 
 
 # ─── TheSportsDB ──────────────────────────────────────────────────────────────
@@ -168,6 +202,20 @@ def fetch_football_data_matches(competition: str = "PL", season: Optional[str] =
 # ─── Data normaliser ──────────────────────────────────────────────────────────
 def normalise_fixture(raw: dict, source: str = "api_football") -> dict:
     """Standardise fixture data to our internal schema."""
+    if source == "sportapi7":
+        return {
+            "api_id": str(raw.get("id", "")),
+            "match_date": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(raw.get("startTimestamp", 0))),
+            "status": raw.get("status", {}).get("type", "not_started"),
+            "venue": "",  # Not always present in top-level
+            "home_team": raw.get("homeTeam", {}).get("name", ""),
+            "away_team": raw.get("awayTeam", {}).get("name", ""),
+            "home_team_api_id": str(raw.get("homeTeam", {}).get("id", "")),
+            "away_team_api_id": str(raw.get("awayTeam", {}).get("id", "")),
+            "league_id": str(raw.get("tournament", {}).get("id", "")),
+            "season": "2024",  # Fallback
+        }
+
     if source == "api_football":
         fix = raw.get("fixture", {})
         teams = raw.get("teams", {})

@@ -41,49 +41,78 @@ SPORTYBET_SPORT_URLS = {
 
 async def scrape_from_odds_api(sport: str = "soccer_epl") -> list[dict]:
     """
-    Fetch and store odds from The Odds API for all matches.
-    Returns list of stored records.
+    Fetch and store odds (supports The Odds API and SportAPI).
     """
+    from scrapers.data_fetch import get_active_source
     raw = fetch_odds_api(sport=sport, regions="uk,eu", markets="h2h,totals")
     if not raw:
         return []
 
+    source = get_active_source()
     stored = []
     async with AsyncSessionLocal() as db:
-        for event in raw:
-            # Find or skip match (we match on api_id from fixture data)
-            match_api_id = event.get("id", "")
-            result = await db.execute(
-                select(Match).where(Match.api_id == match_api_id)
-            )
-            match = result.scalar_one_or_none()
-            match_id = match.id if match else None
+        if source == "sportapi7":
+            # Parsing SportAPI specific structure
+            for event_odds in raw:
+                fid = str(event_odds.get("fid", ""))
+                # Find matching match in our DB
+                result = await db.execute(select(Match).where(Match.api_id == fid))
+                match = result.scalar_one_or_none()
+                if not match: continue
 
-            for bm in event.get("bookmakers", []):
-                bm_key = bm.get("key", "")
-                for market in bm.get("markets", []):
-                    market_key = market.get("key", "")
-                    outcomes = {o["name"]: o["price"] for o in market.get("outcomes", [])}
+                choices = {c["name"]: c.get("fractionalValue") for c in event_odds.get("choices", [])}
+                
+                # Conversion helper for fractional (SportAPI uses strings like "2/1")
+                def parse_frac(v):
+                    if not v or "/" not in v: return None
+                    try:
+                        n, d = map(int, v.split("/"))
+                        return round(n/d + 1, 3)
+                    except: return None
 
-                    home_name = event.get("home_team", "")
-                    away_name = event.get("away_team", "")
+                record = OddsHistory(
+                    match_id=match.id,
+                    bookmaker="sportapi7",
+                    market="1X2",
+                    home_odds=parse_frac(choices.get("1")),
+                    draw_odds=parse_frac(choices.get("X")),
+                    away_odds=parse_frac(choices.get("2")),
+                    fetched_at=datetime.utcnow(),
+                )
+                db.add(record)
+                stored.append("sportapi7")
+        else:
+            # Parsing Standard The Odds API structure
+            for event in raw:
+                match_api_id = event.get("id", "")
+                result = await db.execute(select(Match).where(Match.api_id == match_api_id))
+                match = result.scalar_one_or_none()
+                match_id = match.id if match else None
 
-                    record = OddsHistory(
-                        match_id=match_id,
-                        bookmaker=bm_key,
-                        market="1X2" if market_key == "h2h" else market_key.upper(),
-                        home_odds=outcomes.get(home_name),
-                        away_odds=outcomes.get(away_name),
-                        draw_odds=outcomes.get("Draw"),
-                        over_odds=outcomes.get("Over 2.5"),
-                        under_odds=outcomes.get("Under 2.5"),
-                        fetched_at=datetime.utcnow(),
-                    )
-                    db.add(record)
-                    stored.append(bm_key)
+                for bm in event.get("bookmakers", []):
+                    bm_key = bm.get("key", "")
+                    for market in bm.get("markets", []):
+                        market_key = market.get("key", "")
+                        outcomes = {o["name"]: o["price"] for o in market.get("outcomes", [])}
+                        home_name = event.get("home_team", "")
+                        away_name = event.get("away_team", "")
+
+                        record = OddsHistory(
+                            match_id=match_id,
+                            bookmaker=bm_key,
+                            market="1X2" if market_key == "h2h" else market_key.upper(),
+                            home_odds=outcomes.get(home_name),
+                            away_odds=outcomes.get(away_name),
+                            draw_odds=outcomes.get("Draw"),
+                            over_odds=outcomes.get("Over 2.5"),
+                            under_odds=outcomes.get("Under 2.5"),
+                            fetched_at=datetime.utcnow(),
+                        )
+                        db.add(record)
+                        stored.append(bm_key)
 
         await db.commit()
-        logger.info(f"Stored {len(stored)} odds records from The Odds API.")
+        logger.info(f"Stored {len(stored)} odds records.")
     return stored
 
 

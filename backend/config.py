@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # ─── Sports APIs ──────────────────────────────────────────────────────────
     api_football_key: str = ""
+    rapidapi_host_football: str = "v3.football.api-sports.io"
     odds_api_key: str = ""
     thesportsdb_api_key: str = "2"
     balldontlie_api_key: str = ""

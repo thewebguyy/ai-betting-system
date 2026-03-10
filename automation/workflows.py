@@ -23,7 +23,7 @@ async def job_daily_scan():
     logger.info("[Scheduler] Running daily scan…")
     try:
         from scrapers.odds_scraper import scrape_all_bookmakers
-        from scrapers.data_fetch import fetch_fixtures, normalise_fixture
+        from scrapers.data_fetch import fetch_fixtures, normalise_fixture, get_active_source
         from models.value_model import detect_value_bets_for_upcoming
         from backend.database import AsyncSessionLocal
         from backend.models import Match, League, Team
@@ -32,9 +32,10 @@ async def job_daily_scan():
 
         # Fetch and store upcoming fixtures
         raw_fixtures = fetch_fixtures(league_id=39, season=2024)
+        source = get_active_source()
         async with AsyncSessionLocal() as db:
             for raw in raw_fixtures[:50]:
-                norm = normalise_fixture(raw, "api_football")
+                norm = normalise_fixture(raw, source)
                 # Upsert match
                 result = await db.execute(
                     select(Match).where(Match.api_id == norm["api_id"])
