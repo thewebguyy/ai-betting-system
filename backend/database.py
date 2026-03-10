@@ -57,7 +57,7 @@ async def init_db():
         return
     schema_sql = schema_path.read_text()
     # Split by statement (crude but works for this schema)
-    statements = [s.strip() for s in schema_sql.split(";") if s.strip() and not s.strip().startswith("--")]
+    statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
     async with engine.begin() as conn:
         for stmt in statements:
             try:
