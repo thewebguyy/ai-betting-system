@@ -163,7 +163,11 @@ Analyse the value in each market given these probabilities. Identify:
 
 Be concise and data-driven. Format as bullet points.
 """
-    return await call_claude(prompt)
+    strategy = await call_claude(prompt)
+    if "[Claude key not configured]" in strategy or "[Claude error" in strategy:
+        # Fallback to Gemini
+        strategy = await call_gemini(prompt)
+    return strategy
 
 
 async def get_sentiment_analysis(team_name: str, news_text: str) -> dict:
@@ -221,10 +225,11 @@ Model probabilities: Home={model_probs.get('home', 0):.1%} Draw={model_probs.get
 Value bets detected: {len(value_bets)}
 """
 
-    # Get strategy from Claude
-    strategy = await call_claude(
-        f"Write a concise 3-paragraph betting intelligence report for this match:\n{context}\nBe factual and data-driven."
-    )
+    # Get strategy (Claude primary, Gemini fallback)
+    strategy_prompt = f"Write a concise 3-paragraph betting intelligence report for this match:\n{context}\nBe factual and data-driven."
+    strategy = await call_claude(strategy_prompt)
+    if "[Claude key not configured]" in strategy or "[Claude error" in strategy:
+        strategy = await call_gemini(strategy_prompt)
 
     # Build markdown
     report_md = f"""# Match Intelligence Report
