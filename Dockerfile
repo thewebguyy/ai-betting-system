@@ -64,6 +64,7 @@ RUN mkdir -p db logs reports models/cache
 # Expose FastAPI port
 EXPOSE 8000
 
-# Entry point — run migrations then start the server
-CMD ["sh", "-c", "python -m backend.db_init && uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Entry point — start the server (DB init is handled in backend/app.py lifespan)
+CMD ["sh", "-c", "uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
 

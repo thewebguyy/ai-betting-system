@@ -21,7 +21,8 @@ class TokenResponse(BaseModel):
 
 # ─── League ───────────────────────────────────────────────────────────────────
 class LeagueOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     api_id: Optional[str]
     name: str
@@ -32,7 +33,8 @@ class LeagueOut(BaseModel):
 
 # ─── Match ────────────────────────────────────────────────────────────────────
 class MatchOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     api_id: Optional[str]
     league_id: Optional[int]
@@ -49,7 +51,8 @@ class MatchOut(BaseModel):
 
 # ─── Odds ─────────────────────────────────────────────────────────────────────
 class OddsOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     match_id: Optional[int]
     bookmaker: str
@@ -74,7 +77,8 @@ class OddsIn(BaseModel):
 
 # ─── Value Bets ───────────────────────────────────────────────────────────────
 class ValueBetOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     match_id: Optional[int]
     bookmaker: str
@@ -105,7 +109,8 @@ class BetIn(BaseModel):
 
 
 class BetOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     bookmaker: str
     market: str
@@ -130,7 +135,8 @@ class BetSettleIn(BaseModel):
 
 # ─── Bankroll ─────────────────────────────────────────────────────────────────
 class BankrollSnapshot(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     balance: float
     note: Optional[str]
@@ -185,7 +191,8 @@ class EVCalcOut(BaseModel):
 
 # ─── Reports ──────────────────────────────────────────────────────────────────
 class ReportOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: int
     report_type: str
     title: str
