@@ -61,12 +61,16 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
 
 async def init_db():
     """Bootstrap tables using SQLAlchemy metadata."""
-    async with engine.begin() as conn:
-        # This will create tables if they don't exist based on the models
-        # It's more robust than raw SQL for cross-db (SQLite/Postgres) support.
-        # We import models here to ensure they are registered with Base.metadata
-        from backend import models  # noqa: F401
-        await conn.run_sync(Base.metadata.create_all)
-    
-    logger.info("Database tables initialised.")
+    try:
+        from asyncio import wait_for
+        async with engine.begin() as conn:
+            # Import models to register them
+            from backend import models  # noqa: F401
+            # Add a timeout to avoid hanging startup forever if DB is down
+            await wait_for(conn.run_sync(Base.metadata.create_all), timeout=10.0)
+        logger.info("Database tables initialised.")
+    except Exception as e:
+        logger.error(f"Database initialisation failed: {e}")
+        logger.warning("App will attempt to start but DB operations might fail.")
+
 

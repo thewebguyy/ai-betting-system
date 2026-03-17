@@ -5,10 +5,13 @@ const BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname.incl
     : 'http://localhost:8000');
 
 
+console.log('API Base URL:', BASE_URL);
+
 const api = axios.create({
     baseURL: BASE_URL,
-    timeout: 15000,
+    timeout: 10000,
 });
+
 
 // Attach JWT token to every request
 api.interceptors.request.use((config) => {

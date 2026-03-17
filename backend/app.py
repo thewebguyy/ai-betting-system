@@ -90,15 +90,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://ai-betting-system.vercel.app",  # Add yours here
-        "https://ai-betting-system-production.up.railway.app"
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Serve report files
 app.mount("/reports", StaticFiles(directory="reports"), name="reports")

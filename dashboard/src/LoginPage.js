@@ -15,7 +15,9 @@ export default function LoginPage() {
         try {
             await login(username, password);
         } catch (err) {
+            console.error('Login error detail:', err);
             if (err.response?.status === 401) {
+
                 setError('Invalid credentials. Double-check ADMIN_USERNAME and ADMIN_PASSWORD in Railway.');
             } else if (!err.response) {
                 setError(`Connection failed. Ensure backend is running at ${err.config?.baseURL}`);
