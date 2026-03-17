@@ -118,15 +118,13 @@ async def root():
 # ═══════════════════════════════════════════════════════════════════════════════
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
-@app.api_route("/auth/token", methods=["GET", "POST"], response_model=TokenResponse, tags=["Auth"])
-async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
-    if request.method == "GET":
-        raise HTTPException(status_code=405, detail="GET not allowed here. Use POST.")
-    
+@app.post("/auth/token", response_model=TokenResponse, tags=["Auth"])
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if not authenticate_user(form_data.username, form_data.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
     token = create_access_token({"sub": form_data.username}, timedelta(minutes=settings.jwt_expire_minutes))
     return TokenResponse(access_token=token)
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
