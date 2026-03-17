@@ -40,10 +40,11 @@ export const login = async (username, password) => {
     const params = new URLSearchParams();
     params.append('username', username);
     params.append('password', password);
-    // Use absolute path to ensure no weird slash issues
-    const res = await api.post('/auth/token', params, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    const res = await axios.post(`${BASE_URL}/auth/token`, params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 10000
     });
+
 
     localStorage.setItem('access_token', res.data.access_token);
     return res.data;

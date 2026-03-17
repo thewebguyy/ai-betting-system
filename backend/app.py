@@ -119,11 +119,24 @@ async def root():
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.post("/auth/token", response_model=TokenResponse, tags=["Auth"])
+@app.post("/auth/token/", response_model=TokenResponse, tags=["Auth"], include_in_schema=False)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    logger.info(f"Login attempt received for user: {form_data.username}")
     if not authenticate_user(form_data.username, form_data.password):
+        logger.warning(f"Failed login attempt for user: {form_data.username}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
     token = create_access_token({"sub": form_data.username}, timedelta(minutes=settings.jwt_expire_minutes))
     return TokenResponse(access_token=token)
+
+
+@app.get("/auth/token", include_in_schema=False)
+async def login_get_check():
+    return {"error": "Method Not Allowed", "hint": "The backend RECEIVED a GET request. Please use POST for /auth/token."}
+
+@app.get("/auth/token/", include_in_schema=False)
+async def login_get_check_slash():
+    return {"error": "Method Not Allowed", "hint": "The backend RECEIVED a GET request (with slash). Please use POST for /auth/token."}
+
 
 
 
