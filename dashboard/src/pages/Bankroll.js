@@ -19,9 +19,11 @@ export default function BankrollPage() {
         setLoading(true);
         try {
             const [s, b] = await Promise.all([getBankroll(30), getBets({ limit: 50 })]);
-            setSnapshots(s.reverse()); // chronological
-            setBets(b);
+            const validSnapshots = Array.isArray(s) ? s : [];
+            setSnapshots([...validSnapshots].reverse()); // chronological
+            setBets(Array.isArray(b) ? b : []);
         } finally {
+
             setLoading(false);
         }
     };

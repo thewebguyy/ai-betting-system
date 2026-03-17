@@ -1,11 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-const WS_URL = process.env.REACT_APP_WS_URL 
-    || (window.location.hostname.includes('vercel.app')
-        ? 'wss://ai-betting-system-production.up.railway.app/ws/alerts'
-        : (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-          + (process.env.REACT_APP_API_URL?.replace(/^https?:\/\//, '') || 'localhost:8000') 
-          + '/ws/alerts');
+const getWsUrl = () => {
+    if (process.env.REACT_APP_WS_URL) return process.env.REACT_APP_WS_URL;
+    if (window.location.hostname.includes('vercel.app')) {
+        return 'wss://ai-betting-system-production.up.railway.app/ws/alerts';
+    }
+    const apiBase = (process.env.REACT_APP_API_URL || 'localhost:8000').replace(/^https?:\/\//, '');
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    return `${protocol}${apiBase}/ws/alerts`;
+};
+
+const WS_URL = getWsUrl();
+
 
 
 

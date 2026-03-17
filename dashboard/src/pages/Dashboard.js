@@ -25,12 +25,16 @@ export default function Dashboard() {
             const [a, b, vb] = await Promise.all([
                 getAnalytics(), getBankroll(1), getValueBets({ min_ev: 0.05, limit: 5 })
             ]);
-            setAnalytics(a);
-            setBankroll(b);
-            setValueBets(vb);
+            setAnalytics(a || {});
+            setBankroll(Array.isArray(b) ? b : []);
+            setValueBets(Array.isArray(vb) ? vb : []);
         } catch (e) {
-            console.error(e);
+            console.error('Dashboard load error:', e);
+            setAnalytics({});
+            setBankroll([]);
+            setValueBets([]);
         } finally {
+
             setLoading(false);
         }
     }, []);

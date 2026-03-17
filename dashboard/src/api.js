@@ -1,8 +1,14 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname.includes('localhost') 
+let BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname.includes('localhost') 
     ? 'http://localhost:8000'
     : 'https://ai-betting-system-production.up.railway.app');
+
+// Force protocol if missing
+if (BASE_URL && !BASE_URL.startsWith('http')) {
+    BASE_URL = 'https://' + BASE_URL;
+}
+
 
 
 console.log('API Base URL:', BASE_URL);

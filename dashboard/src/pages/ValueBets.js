@@ -20,8 +20,9 @@ export default function ValueBetsPage() {
         setLoading(true);
         try {
             const data = await getValueBets({ min_ev: minEv, status: filterStatus || undefined, limit: 100 });
-            setBets(data);
+            setBets(Array.isArray(data) ? data : []);
         } finally {
+
             setLoading(false);
         }
     };
