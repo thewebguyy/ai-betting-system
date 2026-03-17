@@ -14,6 +14,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pytz import utc
+from datetime import datetime, timedelta
+
 
 
 # ─── Job functions ────────────────────────────────────────────────────────────
@@ -127,6 +129,27 @@ async def job_daily_report():
         logger.error(f"[Scheduler] Daily report error: {e}")
 
 
+async def job_xg_and_strengths():
+    """Daily — Process xG data and update team strengths."""
+    from automation.xg_processor import process_all_leagues_xg
+    await process_all_leagues_xg()
+
+
+async def job_track_clv():
+    """Every 10 mins — Track closing odds for recently started matches."""
+    from automation.clv_tracker import track_closing_odds
+    await track_closing_odds()
+
+
+async def job_monitor_news_weather():
+    """Every 30 mins — Check injuries and weather for upcoming matches."""
+    from automation.weather_service import update_match_weather
+    from automation.news_monitor import monitor_team_news
+    await update_match_weather()
+    await monitor_team_news()
+
+
+
 # ─── Scheduler factory ────────────────────────────────────────────────────────
 
 def start_scheduler() -> AsyncIOScheduler:
@@ -142,6 +165,34 @@ def start_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+
+    # xG and Strength Updates at 07:00 UTC
+    scheduler.add_job(
+        job_xg_and_strengths,
+        trigger=CronTrigger(hour=7, minute=0, timezone=utc),
+        id="xg_updates",
+        name="Daily xG and team strength updates",
+        replace_existing=True,
+    )
+
+    # CLV Tracking every 10 minutes
+    scheduler.add_job(
+        job_track_clv,
+        trigger=IntervalTrigger(minutes=10),
+        id="clv_tracking",
+        name="Closing line value tracking",
+        replace_existing=True,
+    )
+
+    # News and Weather monitoring every 30 minutes
+    scheduler.add_job(
+        job_monitor_news_weather,
+        trigger=IntervalTrigger(minutes=30),
+        id="news_weather",
+        name="Team news and weather monitor",
+        replace_existing=True,
+    )
+
 
     # Hourly line movement check
     scheduler.add_job(

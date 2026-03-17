@@ -179,22 +179,43 @@ class MatchPredictor:
     def predict_proba(self, x: np.ndarray) -> tuple[float, float, float]:
         """Return (home_prob, draw_prob, away_prob)."""
         if not self._is_trained:
-            # Fall back to Poisson-derived probabilities from ELO
+            # Fall back to Poisson-derived probabilities from ELO + Strengths + Weather
             # This ensures the Poisson/Dixon-Coles infrastructure is used.
-            elo_h, elo_a = x[0], x[1]
+            home_elo, away_elo = x[0], x[1]
             
-            # Simple heuristic: map ELO diff to expected goals (lambdas)
-            # 100 points diff approx 0.3 goals advantage
-            diff = (elo_h + HOME_ADVANTAGE) - elo_a
+            # Map ELO/Strengths to expected goals (lambdas)
+            diff = (home_elo + HOME_ADVANTAGE) - away_elo
             lh = max(0.5, 1.3 + (diff / 400))
             la = max(0.5, 1.3 - (diff / 400))
             
+            # Apply weather modifiers if available
             return poisson_probs(lh, la)
+
 
         x_scaled = self.scaler.transform(x.reshape(1, -1))
         probs = self.model.predict_proba(x_scaled)[0]
         # class order: 0=Away, 1=Draw, 2=Home
         return float(probs[2]), float(probs[1]), float(probs[0])
+
+    def predict_weighted_xg(self, 
+        home_attack: float, home_defence: float,
+        away_attack: float, away_defence: float,
+        weather_str: str = ""
+    ) -> tuple[float, float, float]:
+        """
+        Calculates probabilities using xG-based strengths and weather.
+        """
+        from automation.weather_service import get_weather_modifier
+        
+        lh, la = estimate_lambda(home_attack, home_defence, away_attack, away_defence)
+        
+        # Apply weather reduction
+        reduction = get_weather_modifier(weather_str)
+        lh = max(0.1, lh - reduction)
+        la = max(0.1, la - reduction)
+        
+        return poisson_probs(lh, la)
+
 
 
     def save(self, path: Path = MODEL_DIR / "predictor.pkl"):

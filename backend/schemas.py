@@ -152,6 +152,12 @@ class AnalyticsOut(BaseModel):
     hit_rate: float
     avg_odds: float
     pending: int
+    avg_clv: float = 0.0
+    roi_by_league: dict = {}
+    roi_by_market: dict = {}
+    roi_by_bookmaker: dict = {}
+    calibration_data: list = []  # List of {bucket: "50-55", actual_win_rate: 0.52, count: 10}
+
 
 
 # ─── EV Calculator ────────────────────────────────────────────────────────────

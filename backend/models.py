@@ -37,8 +37,11 @@ class Team(Base):
     country: Mapped[Optional[str]] = mapped_column(Text)
     league_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("leagues.id"))
     elo_rating: Mapped[float] = mapped_column(Float, default=1500.0)
+    attack_strength: Mapped[float] = mapped_column(Float, default=1.0)
+    defence_strength: Mapped[float] = mapped_column(Float, default=1.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 
 class Match(Base):
@@ -130,6 +133,10 @@ class Bet(Base):
     placed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    closing_odds: Mapped[Optional[float]] = mapped_column(Float)
+    clv: Mapped[Optional[float]] = mapped_column(Float)
+
+
 
 
 class Bankroll(Base):
@@ -162,3 +169,17 @@ class Report(Base):
     file_path: Mapped[Optional[str]] = mapped_column(Text)
     content_md: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TeamMatchStats(Base):
+    __tablename__ = "team_match_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    match_id: Mapped[int] = mapped_column(Integer, ForeignKey("matches.id", ondelete="CASCADE"))
+    team_id: Mapped[int] = mapped_column(Integer, ForeignKey("teams.id", ondelete="CASCADE"))
+    xg_for: Mapped[float] = mapped_column(Float, default=0.0)
+    xg_against: Mapped[float] = mapped_column(Float, default=0.0)
+    goals_for: Mapped[int] = mapped_column(Integer, default=0)
+    goals_against: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+

@@ -38,6 +38,13 @@ SPORTYBET_SPORT_URLS = {
     "football": "https://www.sportybet.com/ke/sport/football",
 }
 
+GENERIC_BOOKMAKER_URLS = {
+    "betway": "https://www.betway.com.gh/sport/soccer",
+    "1xbet": "https://1xbet.com/en/line/football",
+    "melbet": "https://melbet.com/en/line/football",
+}
+
+
 
 async def scrape_from_odds_api(sport: str = "soccer_epl") -> list[dict]:
     """
@@ -198,6 +205,52 @@ async def scrape_sportybet_playwright(sport: str = "football") -> list[dict]:
     return events
 
 
+async def scrape_generic_playwright(bookmaker: str) -> list[dict]:
+    """
+    Generic Playwright scraper for 1xBet, Melbet, etc.
+    """
+    url = GENERIC_BOOKMAKER_URLS.get(bookmaker)
+    if not url: return []
+    events = []
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page(user_agent=ua.random)
+            await page.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
+            
+            await page.goto(url, wait_until="networkidle", timeout=60000)
+            await asyncio.sleep(5) # Allow dynamic content to load
+
+            # 1xBet/Melbet structure (complex, using generic selectors)
+            # This is a representative sample; real implementation would be more robust
+            matches = await page.query_selector_all(".bet-item, .event-item")
+            for m in matches[:15]:
+                try:
+                    teams = await m.query_selector_all(".team-name, .c-events__team")
+                    home = await teams[0].inner_text() if len(teams) > 0 else ""
+                    away = await teams[1].inner_text() if len(teams) > 1 else ""
+                    
+                    odds = await m.query_selector_all(".odds-value, .c-bets__inner")
+                    h_odds = float((await odds[0].inner_text()).strip()) if len(odds) > 0 else None
+                    a_odds = float((await odds[2].inner_text()).strip()) if len(odds) > 2 else None
+                    
+                    events.append({
+                        "bookmaker": bookmaker,
+                        "home_team": home.strip(),
+                        "away_team": away.strip(),
+                        "home_odds": h_odds,
+                        "away_odds": a_odds,
+                    })
+                except: continue
+            await browser.close()
+    except Exception as e:
+        logger.error(f"Scrape error for {bookmaker}: {e}")
+    
+    return events
+
+
+
 def convert_american_to_decimal(american: int) -> float:
     """Convert American odds to decimal format."""
     if american > 0:
@@ -222,12 +275,18 @@ async def scrape_all_bookmakers(sport: str = "soccer_epl") -> dict:
     except Exception as e:
         logger.error(f"Odds API scrape failed: {e}")
 
-    # Fallback: SportyBet (no API needed)
-    try:
-        sb_events = await scrape_sportybet_playwright()
-        results["sportybet"] = len(sb_events)
-    except Exception as e:
-        logger.error(f"SportyBet scrape failed: {e}")
+    # Playwright sources
+    for bm in ["sportybet", "betway", "1xbet", "melbet"]:
+        try:
+            if bm == "sportybet":
+                bm_events = await scrape_sportybet_playwright()
+            else:
+                bm_events = await scrape_generic_playwright(bm)
+            results[bm] = len(bm_events)
+        except Exception as e:
+            logger.error(f"{bm} scrape failed: {e}")
+
 
     logger.info(f"Scrape complete: {results}")
     return results
+

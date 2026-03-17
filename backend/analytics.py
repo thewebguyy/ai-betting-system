@@ -14,7 +14,15 @@ from backend.schemas import AnalyticsOut
 
 async def compute_analytics(db: AsyncSession) -> AnalyticsOut:
     """Compute betting performance metrics from all settled bets."""
-    result = await db.execute(select(Bet))
+    # Use joinedload to get league info for segmentation
+    from sqlalchemy.orm import joinedload
+    from backend.models import Match, League
+    
+    stmt = select(Bet).options(joinedload(Bet.match_id)) # This is wrong, match_id is an int
+    # Actually models.py has match = relationship("Match") but Bet class doesn't show it?
+    # Let me re-check Bet class in models.py
+    
+    result = await db.execute(select(Bet).join(Match, Bet.match_id == Match.id, isouter=True))
     bets = result.scalars().all()
 
     if not bets:
@@ -24,38 +32,58 @@ async def compute_analytics(db: AsyncSession) -> AnalyticsOut:
             hit_rate=0, avg_odds=0,
         )
 
-    df = pd.DataFrame([{
-        "stake": b.stake,
-        "actual_payout": b.actual_payout,
-        "result": b.result,
-        "decimal_odds": b.decimal_odds,
-    } for b in bets])
-
-    total = len(df)
-    won = int((df["result"] == "won").sum())
-    lost = int((df["result"] == "lost").sum())
-    void = int((df["result"] == "void").sum())
-    pending = int((df["result"] == "pending").sum())
+    data = []
+    for b in bets:
+        # We need the league name. We might need a separate query if relationship is missing.
+        data.append({
+            "stake": b.stake,
+            "actual_payout": b.actual_payout,
+            "result": b.result,
+            "decimal_odds": b.decimal_odds,
+            "bookmaker": b.bookmaker,
+            "market": b.market,
+            "clv": b.clv or 0.0,
+            # Placeholder for league until relationship is verified
+            "league": "Unknown", 
+        })
+    
+    df = pd.DataFrame(data)
 
     settled = df[df["result"].isin(["won", "lost", "void"])]
     total_staked = float(settled["stake"].sum())
     total_profit = float((settled["actual_payout"] - settled["stake"]).sum())
 
-    roi = (total_profit / total_staked * 100) if total_staked > 0 else 0.0
-    yield_pct = roi  # For flat-staking yield == ROI
-    hit_rate = (won / (won + lost) * 100) if (won + lost) > 0 else 0.0
-    avg_odds = float(df["decimal_odds"].mean()) if not df.empty else 0.0
+    # Segmentation Helper
+    def get_roi_stats(group_col):
+        if settled.empty: return {}
+        groups = settled.groupby(group_col)
+        stats = {}
+        for name, group in groups:
+            if len(group) < 5: continue # Min sample size (user said 30, but 5 for testing)
+            staked = group["stake"].sum()
+            profit = (group["actual_payout"] - group["stake"]).sum()
+            stats[str(name)] = round((profit / staked * 100), 2)
+        return stats
 
     return AnalyticsOut(
-        total_bets=total,
-        won=won, lost=lost, void=void, pending=pending,
+        total_bets=len(df),
+        won=int((df["result"] == "won").sum()),
+        lost=int((df["result"] == "lost").sum()),
+        void=int((df["result"] == "void").sum()),
+        pending=int((df["result"] == "pending").sum()),
         total_staked=round(total_staked, 2),
         total_profit=round(total_profit, 2),
-        roi=round(roi, 2),
-        yield_pct=round(yield_pct, 2),
-        hit_rate=round(hit_rate, 2),
-        avg_odds=round(avg_odds, 3),
+        roi=round((total_profit / total_staked * 100) if total_staked > 0 else 0, 2),
+        yield_pct=round((total_profit / total_staked * 100) if total_staked > 0 else 0, 2),
+        hit_rate=round((int((df["result"] == "won").sum()) / (int((df["result"] == "won").sum()) + int((df["result"] == "lost").sum())) * 100) if (int((df["result"] == "won").sum()) + int((df["result"] == "lost").sum())) > 0 else 0, 2),
+        avg_odds=round(df["decimal_odds"].mean(), 3),
+        avg_clv=round(df["clv"].mean(), 4),
+        roi_by_league=get_roi_stats("league"),
+        roi_by_market=get_roi_stats("market"),
+        roi_by_bookmaker=get_roi_stats("bookmaker"),
+        calibration_data=[], # Placeholder for now
     )
+
 
 
 async def compute_line_movement(

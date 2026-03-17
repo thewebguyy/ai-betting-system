@@ -118,27 +118,27 @@ def calculate_ev_kelly(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def detect_value_from_odds(
-    home_elo: float, away_elo: float,
-    home_form: Optional[str], away_form: Optional[str],
-    home_injuries: int, away_injuries: int,
+    home_attack: float, home_defence: float,
+    away_attack: float, away_defence: float,
     home_odds: float, draw_odds: Optional[float], away_odds: float,
-    bookmaker: str,
+    weather_str: str = "",
+    bookmaker: str = "bet365",
     match_id: Optional[int] = None,
     bankroll: float = 1000.0,
-) -> list[dict]:
+) -> tuple[list[dict], tuple[float, float, float]]:
     """
-    Given match context and odds from one bookmaker, return list of value bets
-    (may contain 0-3 selections: Home/Draw/Away).
+    Given match context (team strengths, weather) and odds from one bookmaker,
+    return list of value bets (may contain 0-3 selections: Home/Draw/Away).
     """
-    # Get model probabilities
+    # Get model probabilities using strengths and weather if possible
     predictor = get_predictor()
-    features = build_features(
-        home_elo=home_elo, away_elo=away_elo,
-        home_form=home_form, away_form=away_form,
-        home_injuries_count=home_injuries,
-        away_injuries_count=away_injuries,
+    model_h, model_d, model_a = predictor.predict_weighted_xg(
+        home_attack=home_attack, home_defence=home_defence,
+        away_attack=away_attack, away_defence=away_defence,
+        weather_str=weather_str
     )
-    model_h, model_d, model_a = predictor.predict_proba(features)
+
+
 
     # Vig-normalised implied probs
     vig = remove_vig(home_odds, draw_odds, away_odds)
@@ -208,47 +208,57 @@ async def detect_value_bets_for_upcoming():
                 select(OddsHistory)
                 .where(OddsHistory.match_id == match.id)
                 .order_by(OddsHistory.fetched_at.desc())
-                .limit(10)  # up to 10 bookmakers
             )
-            odds_rows = odds_result.scalars().all()
+            all_odds = odds_result.scalars().all()
+            if not all_odds: continue
 
-            seen_bookmakers: set[str] = set()
-            for odds in odds_rows:
-                if odds.bookmaker in seen_bookmakers:
-                    continue
-                seen_bookmakers.add(odds.bookmaker)
+            # Group by selection to find "Best Odds"
+            best_prices = {"Home": (0.0, ""), "Draw": (0.0, ""), "Away": (0.0, "")}
+            seen_bm = set()
+            for o in all_odds:
+                if o.bookmaker in seen_bm: continue
+                seen_bm.add(o.bookmaker)
+                if o.home_odds and o.home_odds > best_prices["Home"][0]:
+                    best_prices["Home"] = (o.home_odds, o.bookmaker)
+                if o.draw_odds and o.draw_odds > best_prices["Draw"][0]:
+                    best_prices["Draw"] = (o.draw_odds, o.bookmaker)
+                if o.away_odds and o.away_odds > best_prices["Away"][0]:
+                    best_prices["Away"] = (o.away_odds, o.bookmaker)
 
-                if not odds.home_odds or not odds.away_odds:
-                    continue
-
+            # Run detection on the best odds for each selection
+            # Note: We run detect_value_from_odds for each bookmaker that has a 'best' price
+            for selection, (price, bm) in best_prices.items():
+                if price == 0: continue
+                
+                # We need a full set of odds (H/D/A) to remove vig correctly.
+                # Here we use the best price for current selection and best available for others.
                 vbs, (mh, md, ma) = detect_value_from_odds(
-                    home_elo=match.home_team.elo_rating if match.home_team else 1500.0,
-                    away_elo=match.away_team.elo_rating if match.away_team else 1500.0,
-                    home_form=match.home_form,
-                    away_form=match.away_form,
-                    home_injuries=len((match.home_injuries or "").split(",")) if match.home_injuries else 0,
-                    away_injuries=len((match.away_injuries or "").split(",")) if match.away_injuries else 0,
-                    home_odds=odds.home_odds,
-                    draw_odds=odds.draw_odds,
-                    away_odds=odds.away_odds,
-                    bookmaker=odds.bookmaker,
+                    home_attack=match.home_team.attack_strength if match.home_team else 1.0,
+                    home_defence=match.home_team.defence_strength if match.home_team else 1.0,
+                    away_attack=match.away_team.attack_strength if match.away_team else 1.0,
+                    away_defence=match.away_team.defence_strength if match.away_team else 1.0,
+                    weather_str=match.weather or "",
+                    home_odds=best_prices["Home"][0],
+                    draw_odds=best_prices["Draw"][0],
+                    away_odds=best_prices["Away"][0],
+                    bookmaker=bm,
                     match_id=match.id,
                     bankroll=bankroll,
                 )
+                
+                # Filter VBs to only include the one where this BM is the best
+                for vb in vbs:
+                    if vb["selection"] == selection:
+                        row = ValueBet(**vb)
+                        db.add(row)
+                        detected_count += 1
+                        logger.info(f"Value found: {selection} @ {price} on {bm} (EV={vb['ev']:.3f})")
 
-                # Cache/Update probabilities in match table
+                # Cache probabilities (only once per match)
                 match.model_home_prob = mh
                 match.model_draw_prob = md
                 match.model_away_prob = ma
 
-                for vb in vbs:
-                    row = ValueBet(**vb)
-                    db.add(row)
-                    detected_count += 1
-                    logger.info(
-                        f"Value bet: {vb['selection']} @ {vb['decimal_odds']} "
-                        f"EV={vb['ev']:.3f} Edge={vb['edge']:.3f} (Book: {vb['bookmaker']})"
-                    )
 
 
         await db.commit()
