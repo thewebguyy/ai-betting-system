@@ -108,6 +108,11 @@ app.add_middleware(
 # Serve report files
 app.mount("/reports", StaticFiles(directory="reports"), name="reports")
 
+@app.get("/", tags=["System"])
+async def root():
+    return {"status": "AI Betting Intelligence System Backend is running", "api_version": "1.0.0"}
+
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ─── Auth ─────────────────────────────────────────────────────────────────────
