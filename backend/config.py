@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     odds_api_key: str = ""
     thesportsdb_api_key: str = "2"
     balldontlie_api_key: str = ""
+    openweather_api_key: str = ""
+
 
     # ─── AI Providers ─────────────────────────────────────────────────────────
     gemini_api_key: str = ""
