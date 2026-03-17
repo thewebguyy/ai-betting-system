@@ -11,8 +11,9 @@ from typing import List, Optional
 from fastapi import (
     FastAPI, Depends, HTTPException, status,
     WebSocket, WebSocketDisconnect, BackgroundTasks,
-    Query
+    Query, Request
 )
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
@@ -117,8 +118,11 @@ async def root():
 # ═══════════════════════════════════════════════════════════════════════════════
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
-@app.post("/auth/token", response_model=TokenResponse, tags=["Auth"])
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@app.api_route("/auth/token", methods=["GET", "POST"], response_model=TokenResponse, tags=["Auth"])
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    if request.method == "GET":
+        raise HTTPException(status_code=405, detail="GET not allowed here. Use POST.")
+    
     if not authenticate_user(form_data.username, form_data.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
     token = create_access_token({"sub": form_data.username}, timedelta(minutes=settings.jwt_expire_minutes))

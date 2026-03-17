@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 const BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname.includes('localhost') 
-    ? 'http://localhost:8000/'
-    : 'https://ai-betting-system-production.up.railway.app/');
+    ? 'http://localhost:8000'
+    : 'https://ai-betting-system-production.up.railway.app');
+
 
 console.log('API Base URL:', BASE_URL);
 
@@ -39,10 +40,11 @@ export const login = async (username, password) => {
     const params = new URLSearchParams();
     params.append('username', username);
     params.append('password', password);
-    // Use the explicit path without leading slash if baseURL ends with one
-    const res = await api.post('auth/token', params, {
+    // Use absolute path to ensure no weird slash issues
+    const res = await api.post('/auth/token', params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
+
     localStorage.setItem('access_token', res.data.access_token);
     return res.data;
 };
