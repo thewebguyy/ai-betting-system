@@ -21,10 +21,16 @@ async def track_closing_odds():
     
     async with AsyncSessionLocal() as db:
         # Find bets where closing_odds is null and match started recently
-        stmt = select(Bet, Match).join(Match, Bet.match_id == Match.id).where(
-            Bet.closing_odds == None,
-            Match.match_date >= start_buffer,
-            Match.match_date <= end_buffer
+        from sqlalchemy.orm import joinedload
+        stmt = (
+            select(Bet, Match)
+            .join(Match, Bet.match_id == Match.id)
+            .options(joinedload(Match.home_team), joinedload(Match.away_team))
+            .where(
+                Bet.closing_odds == None,
+                Match.match_date >= start_buffer,
+                Match.match_date <= end_buffer
+            )
         )
         result = await db.execute(stmt)
         pending = result.all()
@@ -37,8 +43,6 @@ async def track_closing_odds():
         for bet, match in pending:
             try:
                 # Fetch closing odds (using Pinnacle as the gold standard for CLV)
-                # Note: In a real scenario, we'd fetch the exact moment of kickoff.
-                # Here we fetch "just after" which is usually the closing line.
                 raw_odds = await fetch_odds_api(sport="soccer_epl", regions="uk,eu", markets="h2h")
                 
                 # Find matching match and bookmaker (Pinnacle)
@@ -50,9 +54,24 @@ async def track_closing_odds():
                                 for mkt in bm.get('markets', []):
                                     if mkt.get('key') == 'h2h':
                                         outcomes = {o['name']: o['price'] for o in mkt.get('outcomes', [])}
-                                        # Map selection name
-                                        closing_price = outcomes.get(bet.selection) 
-                                        # Note: selection name mapping might be needed (e.g. "Home" vs team name)
+                                        
+                                        # Map selection name to actual team name
+                                        target_name = bet.selection
+                                        if bet.selection == "Home" and match.home_team:
+                                            target_name = match.home_team.name
+                                        elif bet.selection == "Away" and match.away_team:
+                                            target_name = match.away_team.name
+                                        elif bet.selection == "Draw":
+                                            target_name = "Draw"
+                                            
+                                        # Some bookies use specific suffixes or prefixes; fuzzy match if exact fails
+                                        closing_price = outcomes.get(target_name)
+                                        if not closing_price:
+                                            # Fuzzy fallback
+                                            for name, price in outcomes.items():
+                                                if target_name in name or name in target_name:
+                                                    closing_price = price
+                                                    break
                                         break
                 
                 if closing_price:
@@ -60,6 +79,7 @@ async def track_closing_odds():
                     # CLV = (Opening Odds / Closing Odds) - 1
                     bet.clv = round((bet.decimal_odds / closing_price) - 1, 4)
                     logger.info(f"CLV recorded for Bet {bet.id}: {bet.clv:+.2%}")
+
                 
             except Exception as e:
                 logger.error(f"Error fetching closing odds for Match {match.id}: {e}")

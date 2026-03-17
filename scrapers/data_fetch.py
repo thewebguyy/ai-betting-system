@@ -130,8 +130,12 @@ async def fetch_injuries(fixture_id: int) -> list[dict]:
 
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_head_to_head(home_id: int, away_id: int, last: int = 10) -> list[dict]:
+@retry(
+    stop=stop_after_attempt(3), 
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError)
+)
+async def fetch_head_to_head(home_id: int, away_id: int, last: int = 10) -> list[dict]:
     if not settings.api_football_key:
         return []
     if not _check_rate(_api_football_calls, 95, 86400):
@@ -139,9 +143,11 @@ def fetch_head_to_head(home_id: int, away_id: int, last: int = 10) -> list[dict]
 
     url = f"{API_FOOTBALL_BASE}/fixtures/headtohead"
     params = {"h2h": f"{home_id}-{away_id}", "last": last}
-    resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, params=params, timeout=15)
-    resp.raise_for_status()
-    return resp.json().get("response", [])
+    async with httpx.AsyncClient(headers=BASE_HEADERS_RAPIDAPI, timeout=15.0) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json().get("response", [])
+
 
 
 # ─── The Odds API ─────────────────────────────────────────────────────────────
@@ -193,21 +199,23 @@ async def fetch_odds_api(sport: str = "soccer_epl", regions: str = "uk,eu,us", m
 
 
 # ─── TheSportsDB ──────────────────────────────────────────────────────────────
-def fetch_sportsdb_events(league_id: str = "4328", season: str = "2024-2025") -> list[dict]:
+async def fetch_sportsdb_events(league_id: str = "4328", season: str = "2024-2025") -> list[dict]:
     """Free public endpoint — key=2."""
     url = f"{SPORTSDB_BASE}/{settings.thesportsdb_api_key}/eventsseason.php"
     params = {"id": league_id, "s": season}
     try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("events") or []
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            return resp.json().get("events") or []
     except Exception as e:
         logger.error(f"TheSportsDB error: {e}")
         return []
 
 
+
 # ─── football-data.org ────────────────────────────────────────────────────────
-def fetch_football_data_matches(competition: str = "PL", season: Optional[str] = None) -> list[dict]:
+async def fetch_football_data_matches(competition: str = "PL", season: Optional[str] = None) -> list[dict]:
     """Free plan: 10 competitions, last 10 seasons."""
     url = f"{FOOTBALL_DATA_BASE}/competitions/{competition}/matches"
     params = {}
@@ -215,12 +223,14 @@ def fetch_football_data_matches(competition: str = "PL", season: Optional[str] =
         params["season"] = season
     headers = {"X-Auth-Token": ""}  # Free tier — no token needed for historical
     try:
-        resp = requests.get(url, headers=headers, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("matches", [])
+        async with httpx.AsyncClient(headers=headers, timeout=15.0) as client:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            return resp.json().get("matches", [])
     except Exception as e:
         logger.error(f"football-data.org error: {e}")
         return []
+
 
 
 # ─── Data normaliser ──────────────────────────────────────────────────────────

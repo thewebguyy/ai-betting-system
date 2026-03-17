@@ -118,6 +118,9 @@ class BetOut(BaseModel):
     placed_at: datetime
     settled_at: Optional[datetime]
     notes: Optional[str]
+    closing_odds: Optional[float]
+    clv: Optional[float]
+
 
 
 class BetSettleIn(BaseModel):

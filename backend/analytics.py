@@ -14,16 +14,14 @@ from backend.schemas import AnalyticsOut
 
 async def compute_analytics(db: AsyncSession) -> AnalyticsOut:
     """Compute betting performance metrics from all settled bets."""
-    # Use joinedload to get league info for segmentation
+    # Use joinedload to get match and league info for segmentation
     from sqlalchemy.orm import joinedload
     from backend.models import Match, League
     
-    stmt = select(Bet).options(joinedload(Bet.match_id)) # This is wrong, match_id is an int
-    # Actually models.py has match = relationship("Match") but Bet class doesn't show it?
-    # Let me re-check Bet class in models.py
-    
-    result = await db.execute(select(Bet).join(Match, Bet.match_id == Match.id, isouter=True))
+    stmt = select(Bet).options(joinedload(Bet.match).joinedload(Match.league))
+    result = await db.execute(stmt)
     bets = result.scalars().all()
+
 
     if not bets:
         return AnalyticsOut(
@@ -34,7 +32,10 @@ async def compute_analytics(db: AsyncSession) -> AnalyticsOut:
 
     data = []
     for b in bets:
-        # We need the league name. We might need a separate query if relationship is missing.
+        league_name = "Unknown"
+        if b.match and b.match.league:
+            league_name = b.match.league.name
+            
         data.append({
             "stake": b.stake,
             "actual_payout": b.actual_payout,
@@ -43,9 +44,9 @@ async def compute_analytics(db: AsyncSession) -> AnalyticsOut:
             "bookmaker": b.bookmaker,
             "market": b.market,
             "clv": b.clv or 0.0,
-            # Placeholder for league until relationship is verified
-            "league": "Unknown", 
+            "league": league_name, 
         })
+
     
     df = pd.DataFrame(data)
 

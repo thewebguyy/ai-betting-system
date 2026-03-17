@@ -215,5 +215,6 @@ def start_scheduler() -> AsyncIOScheduler:
     )
 
     scheduler.start()
-    logger.info("APScheduler started with 3 jobs.")
+    logger.info("APScheduler started with 6 jobs.")
     return scheduler
+

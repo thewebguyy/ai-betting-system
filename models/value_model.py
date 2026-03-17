@@ -125,7 +125,9 @@ def detect_value_from_odds(
     bookmaker: str = "bet365",
     match_id: Optional[int] = None,
     bankroll: float = 1000.0,
+    kelly_fraction: float = 0.25,
 ) -> tuple[list[dict], tuple[float, float, float]]:
+
     """
     Given match context (team strengths, weather) and odds from one bookmaker,
     return list of value bets (may contain 0-3 selections: Home/Draw/Away).
@@ -155,7 +157,8 @@ def detect_value_from_odds(
         edge = model_p - true_ip
         ev = expected_value(model_p, d_odds)
         kf_full = kelly_criterion(model_p, d_odds)
-        kf_frac = round(kf_full * settings.kelly_fraction, 6)
+        kf_frac = round(kf_full * kelly_fraction, 6)
+
         stake = round(bankroll * kf_frac, 2)
 
         if edge >= settings.min_value_threshold and ev > 0:
@@ -193,6 +196,21 @@ async def detect_value_bets_for_upcoming():
         )
         br = br_result.scalar_one_or_none()
         bankroll = br.balance if br else settings.default_bankroll
+
+        # Check Drawdown Protection
+        from backend.models import SystemConfig
+        cfg_paused = await db.execute(select(SystemConfig).where(SystemConfig.key == "betting_paused"))
+        if (paused_obj := cfg_paused.scalar_one_or_none()) and paused_obj.value == "True":
+            logger.warning("[Scanner] Betting is PAUSED due to drawdown protection.")
+            return 0
+            
+        cfg_kelly = await db.execute(select(SystemConfig).where(SystemConfig.key == "kelly_fraction_multiplier"))
+        kelly_mult = float(cfg_kelly.scalar_one_or_none().value) if cfg_kelly.scalar_one_or_none() else 1.0
+        
+        effective_kelly = settings.kelly_fraction * kelly_mult
+        if kelly_mult < 1.0:
+            logger.info(f"[Scanner] Reduced Kelly Fraction in effect: {effective_kelly:.3f}")
+
 
         # Get upcoming matches
         matches_result = await db.execute(
@@ -244,7 +262,9 @@ async def detect_value_bets_for_upcoming():
                     bookmaker=bm,
                     match_id=match.id,
                     bankroll=bankroll,
+                    kelly_fraction=effective_kelly,
                 )
+
                 
                 # Filter VBs to only include the one where this BM is the best
                 for vb in vbs:

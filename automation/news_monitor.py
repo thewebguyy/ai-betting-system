@@ -29,19 +29,23 @@ async def monitor_team_news():
         for match in matches:
             try:
                 # API-Football injuries endpoint
-                # In a real scenario, match.api_id would be the fixture ID
+                # Match.api_id could be a string like 'epl-123' if from other sources
+                if not match.api_id or not str(match.api_id).isdigit():
+                    logger.debug(f"Skipping injuries for Match {match.id}: non-numeric api_id '{match.api_id}'")
+                    continue
+
                 raw_injuries = await fetch_injuries(int(match.api_id))
                 
                 # Update match
-                home_inj = [i['player']['name'] for i in raw_injuries if i['team']['id'] == match.home_team_id]
-                away_inj = [i['player']['name'] for i in raw_injuries if i['team']['id'] == match.away_team_id]
+                home_inj = [i['player']['name'] for i in raw_injuries if i.get('team', {}).get('id') == match.home_team_id]
+                away_inj = [i['player']['name'] for i in raw_injuries if i.get('team', {}).get('id') == match.away_team_id]
                 
                 match.home_injuries = ",".join(home_inj)
                 match.away_injuries = ",".join(away_inj)
                 
-                logger.info(f"Injuries updated for Match {match.id}")
+                logger.info(f"Injuries updated for Match {match.id}: {len(home_inj)}H, {len(away_inj)}A")
             except Exception as e:
-                # logger.error(f"News monitor error for Match {match.id}: {e}")
-                pass
+                logger.error(f"News monitor error for Match {match.id}: {e}")
+
         
         await db.commit()

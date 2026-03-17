@@ -44,11 +44,12 @@ async def update_match_weather():
                 try:
                     # OpenWeatherMap API call
                     # url = f"https://api.openweathermap.org/data/2.5/weather?q={location}&appid={settings.openweather_api_key}"
-                    # For now, we'll simulate it or use a placeholder
-                    weather_desc = "Rain, Wind 40km/h"
+                    # For now, we'll use a neutral default. 
+                    weather_desc = "Clear"
                     match.weather = weather_desc
                     logger.info(f"Weather updated for Match {match.id}: {weather_desc}")
                 except Exception as e:
+
                     logger.error(f"Weather fetch failed for {location}: {e}")
         
         await db.commit()

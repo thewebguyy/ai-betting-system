@@ -41,16 +41,65 @@ async def update_xg_stats(results: list):
             if not res.get('isResult'):
                 continue
                 
-            match_id_ext = str(res['id'])
-            # We need a way to find this match in our DB. 
-            # This is hard without a mapping. For now, we'll try to find by teams and date.
-            # But the user asked for this, so we should assume we can find it or store the Understat ID mapping.
-            # For simplicity in this demo, we'll skip the complex name matching and just show the logic.
+            match_date = datetime.strptime(res['datetime'], '%Y-%m-%d %H:%M:%S').date()
+            h_name = res['h']['title']
+            a_name = res['a']['title']
+            h_xg = float(res['xG']['h'])
+            a_xg = float(res['xG']['a'])
+            h_goals = int(res['goals']['h'])
+            a_goals = int(res['goals']['a'])
+
+            # 1. Find the teams in our DB
+            from backend.models import Team
+            h_team = (await db.execute(select(Team).where(
+                (Team.name.ilike(f"%{h_name}%")) | (Team.name.ilike(f"%{h_name.split(' ')[0]}%"))
+            ))).scalar_one_or_none()
             
-            # Logic would be:
-            # 1. Find Match by teams/date
-            # 2. Add/Update TeamMatchStats for home and away
-            pass
+            a_team = (await db.execute(select(Team).where(
+                (Team.name.ilike(f"%{a_name}%")) | (Team.name.ilike(f"%{a_name.split(' ')[0]}%"))
+            ))).scalar_one_or_none()
+
+            if not h_team or not a_team:
+                continue
+
+            # 2. Find the Match by date and teams
+            match = (await db.execute(select(Match).where(
+                Match.home_team_id == h_team.id,
+                Match.away_team_id == a_team.id,
+                func.date(Match.match_date) == match_date
+            ))).scalar_one_or_none()
+
+            if not match:
+                continue
+
+            # 3. Upsert stats for Home team
+            h_stats = (await db.execute(select(TeamMatchStats).where(
+                TeamMatchStats.match_id == match.id,
+                TeamMatchStats.team_id == h_team.id
+            ))).scalar_one_or_none()
+            if not h_stats:
+                h_stats = TeamMatchStats(match_id=match.id, team_id=h_team.id)
+                db.add(h_stats)
+            h_stats.xg_for = h_xg
+            h_stats.xg_against = a_xg
+            h_stats.goals_for = h_goals
+            h_stats.goals_against = a_goals
+
+            # 4. Upsert stats for Away team
+            a_stats = (await db.execute(select(TeamMatchStats).where(
+                TeamMatchStats.match_id == match.id,
+                TeamMatchStats.team_id == a_team.id
+            ))).scalar_one_or_none()
+            if not a_stats:
+                a_stats = TeamMatchStats(match_id=match.id, team_id=a_team.id)
+                db.add(a_stats)
+            a_stats.xg_for = a_xg
+            a_stats.xg_against = h_xg
+            a_stats.goals_for = a_goals
+            a_stats.goals_against = h_goals
+
+        await db.commit()
+
 
 async def recalculate_team_strengths():
     """

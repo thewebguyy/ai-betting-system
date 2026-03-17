@@ -27,9 +27,12 @@ CREATE TABLE IF NOT EXISTS teams (
     country     TEXT,
     league_id   INTEGER REFERENCES leagues(id),
     elo_rating  REAL DEFAULT 1500.0,
+    attack_strength REAL DEFAULT 1.0,
+    defence_strength REAL DEFAULT 1.0,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
 
 -- ── Matches ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS matches (
@@ -109,8 +112,11 @@ CREATE TABLE IF NOT EXISTS bets (
     result          TEXT DEFAULT 'pending',  -- pending|won|lost|void|push
     placed_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     settled_at      DATETIME,
-    notes           TEXT
+    notes           TEXT,
+    closing_odds    REAL,
+    clv             REAL
 );
+
 
 -- ── Bankroll Snapshots ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS bankroll (
@@ -159,6 +165,30 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ── Team Match Stats (xG Tracker) ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS team_match_stats (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id        INTEGER REFERENCES matches(id) ON DELETE CASCADE,
+    team_id         INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+    xg_for          REAL DEFAULT 0,
+    xg_against      REAL DEFAULT 0,
+    goals_for       INTEGER DEFAULT 0,
+    goals_against   INTEGER DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── System Configuration ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS system_config (
+    key             TEXT PRIMARY KEY,
+    value           TEXT NOT NULL,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ── Seed initial bankroll snapshot ───────────────────────────────────────────
 INSERT OR IGNORE INTO bankroll (balance, note)
 VALUES (1000.0, 'Initial bankroll');
+
+-- ── Seed default system config ─────────────────────────────────────────────
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('betting_paused', 'False');
+INSERT OR IGNORE INTO system_config (key, value) VALUES ('kelly_fraction_multiplier', '1.0');
+

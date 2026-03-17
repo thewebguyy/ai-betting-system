@@ -136,6 +136,9 @@ class Bet(Base):
     closing_odds: Mapped[Optional[float]] = mapped_column(Float)
     clv: Mapped[Optional[float]] = mapped_column(Float)
 
+    match: Mapped[Optional["Match"]] = relationship("Match")
+
+
 
 
 
@@ -182,4 +185,13 @@ class TeamMatchStats(Base):
     goals_for: Mapped[int] = mapped_column(Integer, default=0)
     goals_against: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SystemConfig(Base):
+    __tablename__ = "system_config"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
