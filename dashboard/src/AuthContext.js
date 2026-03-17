@@ -4,9 +4,8 @@ import { login as apiLogin } from './api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [isAuthenticated, setIsAuthenticated] = useState(
-        !!localStorage.getItem('access_token')
-    );
+    const [isAuthenticated, setIsAuthenticated] = useState(true);
+
 
     const login = async (username, password) => {
         await apiLogin(username, password);
