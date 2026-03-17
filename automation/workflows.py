@@ -31,7 +31,7 @@ async def job_daily_scan():
         import json
 
         # Fetch and store upcoming fixtures
-        raw_fixtures = fetch_fixtures(league_id=39, season=2024)
+        raw_fixtures = await fetch_fixtures(league_id=39, season=2024)
         source = get_active_source()
         async with AsyncSessionLocal() as db:
             for raw in raw_fixtures[:50]:

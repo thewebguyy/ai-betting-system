@@ -66,8 +66,11 @@ class Match(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     league: Mapped[Optional["League"]] = relationship("League", back_populates="matches")
+    home_team: Mapped[Optional["Team"]] = relationship("Team", foreign_keys=[home_team_id])
+    away_team: Mapped[Optional["Team"]] = relationship("Team", foreign_keys=[away_team_id])
     odds: Mapped[list["OddsHistory"]] = relationship("OddsHistory", back_populates="match", cascade="all, delete-orphan")
     value_bets: Mapped[list["ValueBet"]] = relationship("ValueBet", back_populates="match")
+
 
 
 class OddsHistory(Base):

@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 
+from loguru import logger
 from backend.config import get_settings
+
 
 settings = get_settings()
 
@@ -19,10 +21,17 @@ Path("logs").mkdir(parents=True, exist_ok=True)
 Path("reports").mkdir(parents=True, exist_ok=True)
 Path("models/cache").mkdir(parents=True, exist_ok=True)
 
+db_url = settings.database_url
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgresql://"):
+    if "+asyncpg" not in db_url:
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 engine = create_async_engine(
-    settings.database_url,
+    db_url,
     echo=settings.app_env == "development",
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -51,18 +60,13 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
 
 
 async def init_db():
-    """Run raw SQL schema file to bootstrap tables."""
-    schema_path = Path("db/schema.sql")
-    if not schema_path.exists():
-        return
-    schema_sql = schema_path.read_text()
-    # Split by statement (crude but works for this schema)
-    statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
+    """Bootstrap tables using SQLAlchemy metadata."""
     async with engine.begin() as conn:
-        for stmt in statements:
-            try:
-                await conn.execute(text(stmt))
-            except Exception as e:
-                # Ignore "already exists" errors
-                if "already exists" not in str(e).lower():
-                    raise
+        # This will create tables if they don't exist based on the models
+        # It's more robust than raw SQL for cross-db (SQLite/Postgres) support.
+        # We import models here to ensure they are registered with Base.metadata
+        from backend import models  # noqa: F401
+        await conn.run_sync(Base.metadata.create_all)
+    
+    logger.info("Database tables initialised.")
+

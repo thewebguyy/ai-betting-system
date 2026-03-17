@@ -44,7 +44,7 @@ async def scrape_from_odds_api(sport: str = "soccer_epl") -> list[dict]:
     Fetch and store odds (supports The Odds API and SportAPI).
     """
     from scrapers.data_fetch import get_active_source
-    raw = fetch_odds_api(sport=sport, regions="uk,eu", markets="h2h,totals")
+    raw = await fetch_odds_api(sport=sport, regions="uk,eu", markets="h2h,totals")
     if not raw:
         return []
 
@@ -149,21 +149,30 @@ async def scrape_sportybet_playwright(sport: str = "football") -> list[dict]:
             await page.goto(url, wait_until="networkidle", timeout=30000)
             await asyncio.sleep(2)
 
-            # Generic extraction — adjust selectors based on current site structure
-            # SportyBet uses class-based selectors; these are representative
+            # generic extraction for SportyBet's current layout
             try:
-                matches = await page.query_selector_all(".m-eventItem")
-                for m in matches[:20]:  # cap at 20 to be polite
-                    try:
-                        teams_el = await m.query_selector_all(".m-teamName")
-                        odds_el = await m.query_selector_all(".m-odd")
+                # SportyBet often uses .m-table-row or .m-event-item
+                matches = await page.query_selector_all(".m-table-row, .m-event-item")
+                if not matches:
+                     matches = await page.query_selector_all("div[class*='event-item']")
 
+                for m in matches[:20]:
+                    try:
+                        # Improved selectors for teams and odds
+                        teams_el = await m.query_selector_all(".m-team-name, .team-name")
+                        odds_el = await m.query_selector_all(".m-outcome-value, .m-odd-value")
+
+                        if not teams_el:
+                            teams_el = await m.query_selector_all("div[class*='team-name']")
+                        
                         home = (await teams_el[0].inner_text()) if len(teams_el) > 0 else ""
                         away = (await teams_el[1].inner_text()) if len(teams_el) > 1 else ""
 
+                        # Odds are usually presented as Home, Draw, Away in 1X2 market
                         home_odds = float((await odds_el[0].inner_text()).strip()) if len(odds_el) > 0 else None
                         draw_odds = float((await odds_el[1].inner_text()).strip()) if len(odds_el) > 1 else None
                         away_odds = float((await odds_el[2].inner_text()).strip()) if len(odds_el) > 2 else None
+
 
                         events.append({
                             "bookmaker": "sportybet",

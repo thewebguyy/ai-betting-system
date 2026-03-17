@@ -7,6 +7,8 @@ python-multipart==0.0.9
 sqlalchemy==2.0.30
 alembic==1.13.1
 aiosqlite==0.20.0
+asyncpg==0.29.0
+
 
 # ── Data & ML ────────────────────────────────────────────────────────────────
 pandas==2.2.2

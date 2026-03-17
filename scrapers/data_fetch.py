@@ -11,8 +11,8 @@ Sources:
 
 import time
 from typing import Optional
-import requests
-from tenacity import retry, stop_after_attempt, wait_exponential
+import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from loguru import logger
 from fake_useragent import UserAgent
 
@@ -57,8 +57,12 @@ def _check_rate(calls_list: list[float], limit: int, window: int = 3600) -> bool
 
 
 # ─── Football Data Fetcher (Multi-Provider) ───────────────────────────────────
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_fixtures(league_id: int = 39, season: int = 2024) -> list[dict]:
+@retry(
+    stop=stop_after_attempt(3), 
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError)
+)
+async def fetch_fixtures(league_id: int = 39, season: int = 2024) -> list[dict]:
     """Fetch upcoming fixtures (supports API-Football and SportAPI)."""
     if not settings.api_football_key:
         logger.warning("API_FOOTBALL_KEY not set — returning empty fixtures.")
@@ -66,26 +70,32 @@ def fetch_fixtures(league_id: int = 39, season: int = 2024) -> list[dict]:
     if not _check_rate(_api_football_calls, 95, 86400):
         return []
 
-    # Case A: SportAPI (sportapi7.p.rapidapi.com)
-    if "sportapi7" in settings.rapidapi_host_football:
-        from datetime import datetime
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        url = f"{API_FOOTBALL_BASE}/api/v1/sport/1/scheduled-events/{date_str}"
-        resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, timeout=15)
+    async with httpx.AsyncClient(headers=BASE_HEADERS_RAPIDAPI, timeout=15.0) as client:
+        # Case A: SportAPI (sportapi7.p.rapidapi.com)
+        if "sportapi7" in settings.rapidapi_host_football:
+            from datetime import datetime
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            url = f"{API_FOOTBALL_BASE}/api/v1/sport/1/scheduled-events/{date_str}"
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.json().get("events", [])
+
+        # Case B: Standard API-Football
+        url = f"{API_FOOTBALL_BASE}/fixtures"
+        params = {"league": league_id, "season": season, "status": "NS"}
+        resp = await client.get(url, params=params)
         resp.raise_for_status()
-        return resp.json().get("events", [])
-
-    # Case B: Standard API-Football
-    url = f"{API_FOOTBALL_BASE}/fixtures"
-    params = {"league": league_id, "season": season, "status": "NS"}
-    resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("response", [])
+        data = resp.json()
+        return data.get("response", [])
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_team_statistics(team_id: int, league_id: int, season: int = 2024) -> dict:
+
+@retry(
+    stop=stop_after_attempt(3), 
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError)
+)
+async def fetch_team_statistics(team_id: int, league_id: int, season: int = 2024) -> dict:
     if not settings.api_football_key:
         return {}
     if not _check_rate(_api_football_calls, 95, 86400):
@@ -93,14 +103,19 @@ def fetch_team_statistics(team_id: int, league_id: int, season: int = 2024) -> d
 
     url = f"{API_FOOTBALL_BASE}/teams/statistics"
     params = {"team": team_id, "league": league_id, "season": season}
-    resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("response", {})
+    async with httpx.AsyncClient(headers=BASE_HEADERS_RAPIDAPI, timeout=15.0) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("response", {})
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_injuries(fixture_id: int) -> list[dict]:
+@retry(
+    stop=stop_after_attempt(3), 
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError)
+)
+async def fetch_injuries(fixture_id: int) -> list[dict]:
     if not settings.api_football_key:
         return []
     if not _check_rate(_api_football_calls, 95, 86400):
@@ -108,9 +123,11 @@ def fetch_injuries(fixture_id: int) -> list[dict]:
 
     url = f"{API_FOOTBALL_BASE}/injuries"
     params = {"fixture": fixture_id}
-    resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, params=params, timeout=15)
-    resp.raise_for_status()
-    return resp.json().get("response", [])
+    async with httpx.AsyncClient(headers=BASE_HEADERS_RAPIDAPI, timeout=15.0) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json().get("response", [])
+
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -128,8 +145,12 @@ def fetch_head_to_head(home_id: int, away_id: int, last: int = 10) -> list[dict]
 
 
 # ─── The Odds API ─────────────────────────────────────────────────────────────
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_odds_api(sport: str = "soccer_epl", regions: str = "uk,eu,us", markets: str = "h2h") -> list[dict]:
+@retry(
+    stop=stop_after_attempt(3), 
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(httpx.HTTPError)
+)
+async def fetch_odds_api(sport: str = "soccer_epl", regions: str = "uk,eu,us", markets: str = "h2h") -> list[dict]:
     """Fetch odds (supports The Odds API and SportAPI fallback)."""
     # 1. Try The Odds API if key exists
     if settings.odds_api_key:
@@ -143,11 +164,12 @@ def fetch_odds_api(sport: str = "soccer_epl", regions: str = "uk,eu,us", markets
                     "oddsFormat": "decimal",
                     "dateFormat": "iso",
                 }
-                resp = requests.get(url, params=params, timeout=15)
-                resp.raise_for_status()
-                remaining = resp.headers.get("x-requests-remaining", "?")
-                logger.info(f"Odds API requests remaining: {remaining}")
-                return resp.json()
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.get(url, params=params)
+                    resp.raise_for_status()
+                    remaining = resp.headers.get("x-requests-remaining", "?")
+                    logger.info(f"Odds API requests remaining: {remaining}")
+                    return resp.json()
             except Exception as e:
                 logger.error(f"The Odds API error: {e}")
 
@@ -157,15 +179,17 @@ def fetch_odds_api(sport: str = "soccer_epl", regions: str = "uk,eu,us", markets
             from datetime import datetime
             date_str = datetime.now().strftime("%Y-%m-%d")
             url = f"{API_FOOTBALL_BASE}/api/v1/sport/1/odds/{date_str}"
-            resp = requests.get(url, headers=BASE_HEADERS_RAPIDAPI, timeout=15)
-            resp.raise_for_status()
-            # Note: SportAPI returns a different format; needs mapping in scraper
-            return resp.json().get("odds", [])
+            async with httpx.AsyncClient(headers=BASE_HEADERS_RAPIDAPI, timeout=15.0) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                # Note: SportAPI returns a different format; needs mapping in scraper
+                return resp.json().get("odds", [])
         except Exception as e:
             logger.error(f"SportAPI odds error: {e}")
 
     logger.warning("No valid odds source found (API keys missing or limits reached).")
     return []
+
 
 
 # ─── TheSportsDB ──────────────────────────────────────────────────────────────

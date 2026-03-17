@@ -18,6 +18,7 @@ from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from backend.config import get_settings
 from backend.database import AsyncSessionLocal
@@ -173,7 +174,8 @@ def detect_value_from_odds(
                 "suggested_stake": stake,
             })
 
-    return value_bets
+    return value_bets, (model_h, model_d, model_a)
+
 
 
 async def detect_value_bets_for_upcoming():
@@ -194,7 +196,9 @@ async def detect_value_bets_for_upcoming():
 
         # Get upcoming matches
         matches_result = await db.execute(
-            select(Match).where(Match.status == "scheduled")
+            select(Match)
+            .options(joinedload(Match.home_team), joinedload(Match.away_team))
+            .where(Match.status == "scheduled")
         )
         matches = matches_result.scalars().all()
 
@@ -217,9 +221,9 @@ async def detect_value_bets_for_upcoming():
                 if not odds.home_odds or not odds.away_odds:
                     continue
 
-                vbs = detect_value_from_odds(
-                    home_elo=match.model_home_prob or 1500.0,  # fallback ELO
-                    away_elo=match.model_away_prob or 1500.0,
+                vbs, (mh, md, ma) = detect_value_from_odds(
+                    home_elo=match.home_team.elo_rating if match.home_team else 1500.0,
+                    away_elo=match.away_team.elo_rating if match.away_team else 1500.0,
                     home_form=match.home_form,
                     away_form=match.away_form,
                     home_injuries=len((match.home_injuries or "").split(",")) if match.home_injuries else 0,
@@ -232,6 +236,11 @@ async def detect_value_bets_for_upcoming():
                     bankroll=bankroll,
                 )
 
+                # Cache/Update probabilities in match table
+                match.model_home_prob = mh
+                match.model_draw_prob = md
+                match.model_away_prob = ma
+
                 for vb in vbs:
                     row = ValueBet(**vb)
                     db.add(row)
@@ -240,6 +249,7 @@ async def detect_value_bets_for_upcoming():
                         f"Value bet: {vb['selection']} @ {vb['decimal_odds']} "
                         f"EV={vb['ev']:.3f} Edge={vb['edge']:.3f} (Book: {vb['bookmaker']})"
                     )
+
 
         await db.commit()
 

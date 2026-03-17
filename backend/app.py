@@ -14,6 +14,7 @@ from fastapi import (
     Query
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
@@ -89,11 +90,18 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://ai-betting-system.vercel.app",  # Add yours here
+        "https://ai-betting-system-production.up.railway.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve report files
+app.mount("/reports", StaticFiles(directory="reports"), name="reports")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

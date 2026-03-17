@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-const WS_BASE = process.env.REACT_APP_API_URL || (window.location.hostname.includes('vercel.app') 
-    ? 'https://ai-betting-system-production.up.railway.app' 
-    : 'http://localhost:8000');
+const WS_URL = process.env.REACT_APP_WS_URL 
+    || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
+    + (process.env.REACT_APP_API_URL?.replace(/^https?:\/\//, '') || 'localhost:8000') 
+    + '/ws/alerts';
 
-const WS_URL = WS_BASE.replace('http', 'ws') + '/ws/alerts';
 
 
 export function useWebSocket() {
