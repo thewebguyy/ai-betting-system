@@ -65,4 +65,5 @@ RUN mkdir -p db logs reports models/cache
 EXPOSE 8000
 
 # Entry point — run migrations then start the server
-CMD ["sh", "-c", "python -m backend.db_init && uvicorn backend.app:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python -m backend.db_init && uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+

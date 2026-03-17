@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 const WS_URL = process.env.REACT_APP_WS_URL 
-    || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-    + (process.env.REACT_APP_API_URL?.replace(/^https?:\/\//, '') || 'localhost:8000') 
-    + '/ws/alerts';
+    || (window.location.hostname.includes('vercel.app')
+        ? 'wss://ai-betting-system-production.up.railway.app/ws/alerts'
+        : (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
+          + (process.env.REACT_APP_API_URL?.replace(/^https?:\/\//, '') || 'localhost:8000') 
+          + '/ws/alerts');
+
 
 
 
