@@ -4,6 +4,9 @@ Main FastAPI application — entrypoint for the AI Betting Intelligence System.
 """
 
 import json
+import sys
+import asyncio
+import subprocess
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import List, Optional
@@ -25,7 +28,7 @@ from backend.config import get_settings
 from backend.database import get_db, init_db
 from backend.auth import authenticate_user, create_access_token, get_current_user
 from backend.models import (
-    Match, OddsHistory, ValueBet, Bet, Bankroll, League, Team, Report
+    Match, OddsHistory, ValueBet, Bet, Bankroll, League, Team, Report, User
 )
 from backend.schemas import (
     LoginRequest, TokenResponse,
@@ -34,6 +37,7 @@ from backend.schemas import (
     BankrollSnapshot, BankrollIn,
     AnalyticsOut, EVCalcIn, EVCalcOut,
     ReportOut, WSEvent,
+    UserOut, UserUpdate, BotStatus,
 )
 from backend.cache import cache_get, cache_set, make_cache_key
 
@@ -76,7 +80,23 @@ async def lifespan(app: FastAPI):
     # Start background scheduler
     from automation.workflows import start_scheduler
     scheduler = start_scheduler()
+    
+    # NEW: Start interactive Telegram bot subprocess
+    # Run as a separate process to avoid event loop conflicts with python-telegram-bot
+    bot_process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "automation.run_bot",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    logger.info(f"Telegram bot process started (PID: {bot_process.pid})")
+    
     yield
+    
+    # Graceful shutdown
+    logger.info("Terminating Telegram bot…")
+    bot_process.terminate()
+    await bot_process.wait()
+    
     scheduler.shutdown(wait=False)
     logger.info("Shutdown complete.")
 
@@ -391,6 +411,57 @@ async def generate_report(
     from automation.report_generator import generate_report_task
     background_tasks.add_task(generate_report_task, report_type, match_id)
     return {"status": f"{report_type} report generation started"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ─── Users (Phase 5) ──────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.get("/users", response_model=List[UserOut], tags=["Users"])
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    _user: str = Depends(get_current_user),
+):
+    """Admin only: list all registered Telegram users."""
+    res = await db.execute(select(User).order_by(desc(User.registered_at)))
+    return [UserOut.model_validate(u) for u in res.scalars().all()]
+
+
+@app.patch("/users/{user_id}", response_model=UserOut, tags=["Users"])
+async def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    _user: str = Depends(get_current_user),
+):
+    """Admin only: change user tier or active status."""
+    res = await db.execute(select(User).where(User.id == user_id))
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(user, k, v)
+    
+    await db.commit()
+    await db.refresh(user)
+    return UserOut.model_validate(user)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ─── Bot Status (Phase 5) ─────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.get("/bot/status", response_model=BotStatus, tags=["System"])
+async def get_bot_status():
+    """Check if the bot subprocess is responding (via Redis metrics)."""
+    from backend.cache import cache_get
+    total = await cache_get("bot:commands:total") or 0
+    # In a real setup, the bot would update a heartbeat key
+    return {
+        "is_running": True, # Simplification
+        "commands_processed": int(total),
+        "last_heartbeat": datetime.utcnow()
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

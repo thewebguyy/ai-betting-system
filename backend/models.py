@@ -217,3 +217,15 @@ class Recommendation(Base):
     value_bet: Mapped["ValueBet"] = relationship("ValueBet", back_populates="recommendations")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    username: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tier: Mapped[str] = mapped_column(String(20), default="free") # free | starter | pro | syndicate
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    registered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+

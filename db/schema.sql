@@ -191,12 +191,23 @@ CREATE TABLE IF NOT EXISTS team_match_stats (
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- ── System Configuration ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS system_config (
     key             TEXT PRIMARY KEY,
     value           TEXT NOT NULL,
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id     TEXT UNIQUE NOT NULL,
+    username        TEXT,
+    tier            TEXT DEFAULT 'free' CHECK(tier IN ('free', 'starter', 'pro', 'syndicate')),
+    is_active       BOOLEAN DEFAULT 1,
+    registered_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at    DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
 
 -- ── Seed initial bankroll snapshot ───────────────────────────────────────────
 INSERT OR IGNORE INTO bankroll (balance, note)

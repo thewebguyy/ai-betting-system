@@ -205,3 +205,27 @@ class WSEvent(BaseModel):
     event_type: str   # value_bet|line_move|alert
     data: dict
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ─── Bot & Users (Phase 5) ───────────────────────────────────────────────────
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    telegram_id: str
+    username: Optional[str]
+    tier: str
+    is_active: bool
+    registered_at: datetime
+    last_seen_at: Optional[datetime]
+
+
+class UserUpdate(BaseModel):
+    tier: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class BotStatus(BaseModel):
+    is_running: bool
+    commands_processed: int
+    last_heartbeat: datetime

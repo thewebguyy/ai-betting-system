@@ -208,6 +208,9 @@ async def job_generate_recommendations():
             await db.commit()
             if rec_count > 0:
                 logger.info(f"[Scheduler] Generated {rec_count} recommendations.")
+                # Phase 5: Refresh the brain cache for the Telegram bot
+                from models.betting_brain import BettingBrain
+                await BettingBrain.refresh_daily_cache()
     except Exception as e:
         logger.error(f"[Scheduler] Recommendation generation error: {e}")
 
