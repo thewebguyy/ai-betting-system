@@ -65,7 +65,11 @@ class Match(Base):
     model_home_prob: Mapped[Optional[float]] = mapped_column(Float)
     model_draw_prob: Mapped[Optional[float]] = mapped_column(Float)
     model_away_prob: Mapped[Optional[float]] = mapped_column(Float)
+    referee_avg_goals: Mapped[Optional[float]] = mapped_column(Float)
+    referee_avg_cards: Mapped[Optional[float]] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    recommendations: Mapped[list["Recommendation"]] = relationship("Recommendation", back_populates="match")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     league: Mapped[Optional["League"]] = relationship("League", back_populates="matches")
@@ -111,7 +115,11 @@ class ValueBet(Base):
     kelly_fraction: Mapped[float] = mapped_column(Float, nullable=False)
     suggested_stake: Mapped[Optional[float]] = mapped_column(Float)
     status: Mapped[str] = mapped_column(Text, default="pending")
+    is_stale: Mapped[bool] = mapped_column(Boolean, default=False)
+    intelligence_score: Mapped[Optional[float]] = mapped_column(Float)
     detected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    recommendations: Mapped[list["Recommendation"]] = relationship("Recommendation", back_populates="value_bet")
 
     match: Mapped[Optional["Match"]] = relationship("Match", back_populates="value_bets")
 
@@ -193,5 +201,19 @@ class SystemConfig(Base):
     key: Mapped[str] = mapped_column(Text, primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    match_id: Mapped[int] = mapped_column(Integer, ForeignKey("matches.id"))
+    value_bet_id: Mapped[int] = mapped_column(Integer, ForeignKey("value_bets.id"))
+    category: Mapped[str] = mapped_column(Text) # Safe | Sniper | Aggressive | Avoid
+    score: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    match: Mapped["Match"] = relationship("Match", back_populates="recommendations")
+    value_bet: Mapped["ValueBet"] = relationship("ValueBet", back_populates="recommendations")
 
 

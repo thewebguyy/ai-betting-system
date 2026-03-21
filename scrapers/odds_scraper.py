@@ -205,6 +205,58 @@ async def scrape_sportybet_playwright(sport: str = "football") -> list[dict]:
     return events
 
 
+async def scrape_bet9ja_xhr() -> list[dict]:
+    """
+    Direct XHR extraction for Bet9ja.
+    Uses httpx to fetch JSON from the internal API.
+    """
+    import httpx
+    # Simplified endpoint from the brief
+    url = "https://sports.bet9ja.com/desktop/feapi/PalimpsestAjax/GetOdds"
+    params = {
+        "pParam": "1", # generic param for soccer/popular
+        "is_cocktail": "0"
+    }
+    headers = {
+        "User-Agent": ua.random,
+        "Accept": "application/json",
+        "Origin": "https://sports.bet9ja.com",
+        "Referer": "https://sports.bet9ja.com/desktop/sport/soccer",
+    }
+    
+    events = []
+    try:
+        async with httpx.AsyncClient(headers=headers, timeout=10.0) as client:
+            resp = await client.get(url, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Bet9ja response structure parsing (example logic)
+                # Usually nested under 'DS' or 'data'
+                matches = data.get("data", {}).get("groupEvents", [])
+                for ge in matches:
+                    for event in ge.get("events", []):
+                        try:
+                            # Extract 1X2 odds
+                            odds_list = event.get("odds", [])
+                            h_odds = next((o["price"] for o in odds_list if o["name"] == "1"), None)
+                            d_odds = next((o["price"] for o in odds_list if o["name"] == "X"), None)
+                            a_odds = next((o["price"] for o in odds_list if o["name"] == "2"), None)
+                            
+                            events.append({
+                                "bookmaker": "bet9ja",
+                                "home_team": event.get("event_name", "").split(" - ")[0],
+                                "away_team": event.get("event_name", "").split(" - ")[1] if " - " in event.get("event_name", "") else "",
+                                "home_odds": float(h_odds) if h_odds else None,
+                                "draw_odds": float(d_odds) if d_odds else None,
+                                "away_odds": float(a_odds) if a_odds else None,
+                            })
+                        except: continue
+    except Exception as e:
+        logger.error(f"Bet9ja XHR scrape failed: {e}")
+        
+    return events
+
+
 async def scrape_generic_playwright(bookmaker: str) -> list[dict]:
     """
     Generic Playwright scraper for 1xBet, Melbet, etc.
@@ -276,10 +328,12 @@ async def scrape_all_bookmakers(sport: str = "soccer_epl") -> dict:
         logger.error(f"Odds API scrape failed: {e}")
 
     # Playwright sources
-    for bm in ["sportybet", "betway", "1xbet", "melbet"]:
+    for bm in ["sportybet", "bet9ja", "betway", "1xbet", "melbet"]:
         try:
             if bm == "sportybet":
                 bm_events = await scrape_sportybet_playwright()
+            elif bm == "bet9ja":
+                bm_events = await scrape_bet9ja_xhr()
             else:
                 bm_events = await scrape_generic_playwright(bm)
             results[bm] = len(bm_events)

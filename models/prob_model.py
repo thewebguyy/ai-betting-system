@@ -26,6 +26,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 from loguru import logger
+from models.goals_model import ou_probability, btts_probability
 
 MODEL_DIR = Path("models/cache")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -292,4 +293,72 @@ def monte_carlo_probs(
             "ci_lower": round(float(np.percentile(ap, 5)), 4),
             "ci_upper": round(float(np.percentile(ap, 95)), 4),
         },
+    }
+
+def ensemble_predict(
+    home_elo: float, away_elo: float,
+    home_attack: float, home_defence: float,
+    away_attack: float, away_defence: float,
+    home_form: Optional[str] = None,
+    away_form: Optional[str] = None,
+    weather_str: str = "",
+) -> dict:
+    """
+    Blended prediction combining ELO, Dixon-Coles Poisson, and Monte Carlo.
+    Weights: ELO=0.20, Dixon-Coles=0.55, Monte Carlo=0.25.
+
+    Returns:
+    {
+        "home": float, "draw": float, "away": float,   # blended 1X2 probs
+        "lambda_h": float, "lambda_a": float,          # expected goals
+        "ou_over": float, "ou_under": float,           # O/U 2.5 probs
+        "btts": float,                                 # BTTS probability
+        "confidence": float,                           # 1 - MC CI width
+        "model_source": "ensemble"
+    }
+    """
+    # 1. Dixon-Coles Poisson
+    lh, la = estimate_lambda(home_attack, home_defence, away_attack, away_defence)
+    p_h_pois, p_d_pois, p_a_pois = poisson_probs(lh, la)
+
+    # 2. ELO
+    p_h_elo, p_d_elo, p_a_elo = elo_to_prob(home_elo, away_elo)
+
+    # 3. Monte Carlo
+    mc_res = monte_carlo_probs(home_elo, away_elo, home_form, away_form, n_simulations=2000)
+    p_h_mc = mc_res["home"]["mean"]
+    p_d_mc = mc_res["draw"]["mean"]
+    p_a_mc = mc_res["away"]["mean"]
+    
+    # Confidence calculation: 1 - average CI width
+    ci_h = mc_res["home"]["ci_upper"] - mc_res["home"]["ci_lower"]
+    ci_d = mc_res["draw"]["ci_upper"] - mc_res["draw"]["ci_lower"]
+    ci_a = mc_res["away"]["ci_upper"] - mc_res["away"]["ci_lower"]
+    avg_ci_width = (ci_h + ci_d + ci_a) / 3
+    confidence = max(0.0, min(1.0, 1.0 - avg_ci_width))
+
+    # 4. Blending
+    p_h = (p_h_elo * 0.20) + (p_h_pois * 0.55) + (p_h_mc * 0.25)
+    p_d = (p_d_elo * 0.20) + (p_d_pois * 0.55) + (p_d_mc * 0.25)
+    p_a = (p_a_elo * 0.20) + (p_a_pois * 0.55) + (p_a_mc * 0.25)
+    
+    # Normalise
+    total = p_h + p_d + p_a
+    p_h, p_d, p_a = p_h / total, p_d / total, p_a / total
+
+    # 5. Secondary Markets (using lambdas)
+    p_over, p_under = ou_probability(lh, la, line=2.5)
+    p_btts = btts_probability(lh, la)
+
+    return {
+        "home": round(p_h, 4),
+        "draw": round(p_d, 4),
+        "away": round(p_a, 4),
+        "lambda_h": round(lh, 4),
+        "lambda_a": round(la, 4),
+        "ou_over": p_over,
+        "ou_under": p_under,
+        "btts": p_btts,
+        "confidence": round(confidence, 4),
+        "model_source": "ensemble"
     }

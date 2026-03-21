@@ -7,6 +7,18 @@ PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 
 -- ── Leagues / Competitions ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS recommendations (
+    id              INTEGER PRIMARY KEY AUTO_INCREMENT,
+    match_id        INTEGER NOT NULL,
+    value_bet_id    INTEGER NOT NULL,
+    category        TEXT NOT NULL,
+    score           REAL NOT NULL,
+    reason          TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (match_id) REFERENCES matches(id),
+    FOREIGN KEY (value_bet_id) REFERENCES value_bets(id)
+);
+
 CREATE TABLE IF NOT EXISTS leagues (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     api_id      TEXT UNIQUE,
@@ -56,6 +68,8 @@ CREATE TABLE IF NOT EXISTS matches (
     model_home_prob REAL,
     model_draw_prob REAL,
     model_away_prob REAL,
+    referee_avg_goals REAL,
+    referee_avg_cards REAL,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );

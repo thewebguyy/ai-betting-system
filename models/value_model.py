@@ -23,7 +23,7 @@ from sqlalchemy.orm import joinedload
 from backend.config import get_settings
 from backend.database import AsyncSessionLocal
 from backend.models import Match, OddsHistory, ValueBet, Bankroll
-from models.prob_model import get_predictor, build_features, monte_carlo_probs
+from models.prob_model import get_predictor, build_features, ensemble_predict
 
 settings = get_settings()
 
@@ -113,6 +113,51 @@ def calculate_ev_kelly(
     }
 
 
+def calculate_intelligence_score(
+    ev: float,
+    confidence: float,
+    overround: float,
+    risks_found: bool = False
+) -> float:
+    """
+    Intelligence Score = (EV * 0.4) + (Confidence * 0.3) + (Vig-Adjustment * 0.2) + (News-Factor * 0.1)
+    Normalized to 0.0 - 1.0 range.
+    """
+    # EV usually -1.0 to 2.0. Scale to 0-1 for scoring.
+    ev_score = min(1.0, max(0.0, ev * 5.0)) # 0.2 EV = 100% score for this component
+    
+    # Vig-Adjustment: Lower overround is better.
+    # Typical overround 0.03 to 0.15.
+    vig_score = max(0.0, 1.0 - (overround * 5.0)) # 0.20 overround = 0 score
+    
+    # News-Factor
+    news_score = 0.5 if risks_found else 1.0
+    
+    score = (ev_score * 0.4) + (confidence * 0.3) + (vig_score * 0.2) + (news_score * 0.1)
+    return round(score, 4)
+
+
+def dynamic_kelly(ev: float, confidence: float, consecutive_losses: int, market: str, multiplier: float) -> float:
+    """
+    Phase 4: Dynamic Kelly calculation with decay for consecutive losses.
+    """
+    # Base fraction derived from EV and confidence
+    f = ev * confidence
+    
+    # Apply decay for consecutive losses (10% reduction per loss)
+    decay = 0.9 ** consecutive_losses
+    f *= decay
+    
+    # Market-based safety factor
+    if market == "correct_score":
+        f *= 0.4  # Correct score is high variance, reduce stake further
+        
+    # Final adjustment using the passed multiplier
+    f *= (1 + multiplier)
+    
+    return round(f, 4)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ─── Value Bet Detection Pipeline ─────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -132,13 +177,16 @@ def detect_value_from_odds(
     Given match context (team strengths, weather) and odds from one bookmaker,
     return list of value bets (may contain 0-3 selections: Home/Draw/Away).
     """
-    # Get model probabilities using strengths and weather if possible
-    predictor = get_predictor()
-    model_h, model_d, model_a = predictor.predict_weighted_xg(
+    # Get ensemble predictions
+    pred = ensemble_predict(
+        home_elo=1500, # Fallback, should ideally be passed in
+        away_elo=1500,
         home_attack=home_attack, home_defence=home_defence,
         away_attack=away_attack, away_defence=away_defence,
         weather_str=weather_str
     )
+    model_h, model_d, model_a = pred["home"], pred["draw"], pred["away"]
+    confidence = pred["confidence"]
 
 
 
@@ -162,6 +210,17 @@ def detect_value_from_odds(
         stake = round(bankroll * kf_frac, 2)
 
         if edge >= settings.min_value_threshold and ev > 0:
+            # Calculate intelligence score
+            # Risks are found if weather is extreme or injuries are flagged (to be enhanced)
+            risks = "extreme" in weather_str.lower() or "storm" in weather_str.lower()
+            
+            intel_score = calculate_intelligence_score(
+                ev=ev,
+                confidence=confidence,
+                overround=vig["overround"],
+                risks_found=risks
+            )
+
             value_bets.append({
                 "match_id": match_id,
                 "bookmaker": bookmaker,
@@ -175,6 +234,7 @@ def detect_value_from_odds(
                 "ev": round(ev, 6),
                 "kelly_fraction": kf_frac,
                 "suggested_stake": stake,
+                "intelligence_score": intel_score,
             })
 
     return value_bets, (model_h, model_d, model_a)

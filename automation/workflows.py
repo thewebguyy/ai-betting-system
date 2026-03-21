@@ -59,6 +59,10 @@ async def job_daily_scan():
         # Detect value bets
         count = await detect_value_bets_for_upcoming()
         logger.info(f"[Scheduler] Daily scan complete. Value bets found: {count}")
+        
+        # Phase 3: Generate recommendations immediately after scan
+        if count > 0:
+            await job_generate_recommendations()
     except Exception as e:
         logger.error(f"[Scheduler] Daily scan error: {e}")
 
@@ -141,12 +145,180 @@ async def job_track_clv():
     await track_closing_odds()
 
 
+async def job_generate_recommendations():
+    """Phase 3: Categorize pending ValueBets into recommendations."""
+    logger.info("[Scheduler] Generating recommendations…")
+    try:
+        from backend.database import AsyncSessionLocal
+        from backend.models import ValueBet, Recommendation, Match
+        from sqlalchemy import select
+        from datetime import datetime
+
+        async with AsyncSessionLocal() as db:
+            # 1. Get all pending value bets that don't have a recommendation yet
+            # We check the relationship or just existence of a record in recommendations table
+            stmt = select(ValueBet).where(
+                ValueBet.status == "pending",
+                ValueBet.is_stale == False
+            )
+            result = await db.execute(stmt)
+            bets = result.scalars().all()
+            
+            rec_count = 0
+            for bet in bets:
+                # Check if recommendation already exists for this value_bet_id
+                check_stmt = select(Recommendation).where(Recommendation.value_bet_id == bet.id)
+                existing = (await db.execute(check_stmt)).scalar_one_or_none()
+                if existing: continue
+
+                # Categorization logic
+                ev = bet.ev
+                score = bet.intelligence_score or 0.0
+                
+                # We'd ideally need the overround here, but for simplicity we'll use EV/Score
+                # In a real scenario, we'd fetch the match and latest odds again or store overround in ValueBet
+                
+                category = "Avoid"
+                reason = "Low intelligence score or high risk."
+                
+                if score > 0.8 and ev > 0.15:
+                    category = "Sniper"
+                    reason = "High EV and high model confidence. Priority bet."
+                elif score > 0.6 and ev > 0.05:
+                    category = "Safe"
+                    reason = "Stable value with good model agreement."
+                elif ev > 0.10:
+                    category = "Aggressive"
+                    reason = "High potential return but lower model stability."
+                
+                if score < 0.3:
+                    category = "Avoid"
+                    reason = "Model disagreement or high market efficiency."
+
+                rec = Recommendation(
+                    match_id=bet.match_id,
+                    value_bet_id=bet.id,
+                    category=category,
+                    score=score,
+                    reason=reason
+                )
+                db.add(rec)
+                rec_count += 1
+            
+            await db.commit()
+            if rec_count > 0:
+                logger.info(f"[Scheduler] Generated {rec_count} recommendations.")
+    except Exception as e:
+        logger.error(f"[Scheduler] Recommendation generation error: {e}")
+
+
 async def job_monitor_news_weather():
-    """Every 30 mins — Check injuries and weather for upcoming matches."""
-    from automation.weather_service import update_match_weather
-    from automation.news_monitor import monitor_team_news
-    await update_match_weather()
-    await monitor_team_news()
+    """Every 30 mins — Poll for injuries and weather updates."""
+    logger.info("[Scheduler] Checking news and weather…")
+    try:
+        from automation.news_monitor import monitor_team_news
+        await monitor_team_news()
+    except Exception as e:
+        logger.error(f"[Scheduler] News monitor job error: {e}")
+
+
+async def job_check_stale_odds():
+    """Every 30 mins — Flag any odds older than 2 hours as 'stale'."""
+    logger.info("[Scheduler] Running stale odds check…")
+    try:
+        from backend.database import AsyncSessionLocal
+        from backend.models import ValueBet, OddsHistory
+        from automation.notifications import send_telegram_message
+        from sqlalchemy import select, update
+        from datetime import datetime, timedelta
+
+        now = datetime.utcnow()
+        stale_threshold = now - timedelta(hours=2)
+
+        async with AsyncSessionLocal() as db:
+            # 1. Update ValueBets where the linked OddsHistory is old
+            # Note: We need to join with OddsHistory to check the fetch time
+            # For simplicity, we'll check ValueBets detected_at if they don't have a direct link to a specific OddsHistory record ID
+            # Assuming detected_at is roughly when odds were fetched or slightly after
+            
+            # Find ValueBets that are older than 2 hours and not already stale
+            stmt = select(ValueBet).where(
+                ValueBet.status == "pending",
+                ValueBet.is_stale == False,
+                ValueBet.detected_at < stale_threshold
+            )
+            result = await db.execute(stmt)
+            stale_bets = result.scalars().all()
+            
+            count = 0
+            for bet in stale_bets:
+                bet.is_stale = True
+                count += 1
+                # Alert for high EV bets that went stale
+                if bet.ev > 0.1:
+                    await send_telegram_message(
+                        f"⚠️ Stale Odds Alert: ValueBet on {bet.match_id} ({bet.selection}) is now stale. (EV: {bet.ev:.2f})"
+                    )
+            
+            await db.commit()
+            if count > 0:
+                logger.info(f"[Scheduler] Flagged {count} value bets as stale.")
+    except Exception as e:
+        logger.error(f"[Scheduler] Stale odds check error: {e}")
+
+
+async def get_consecutive_losses() -> int:
+    """Phase 4: Count consecutive losses from settled bets."""
+    try:
+        from backend.database import AsyncSessionLocal
+        from backend.models import Bet
+        from sqlalchemy import select
+        
+        async with AsyncSessionLocal() as db:
+            stmt = select(Bet).where(Bet.result != "pending").order_by(Bet.settled_at.desc())
+            result = await db.execute(stmt)
+            bets = result.scalars().all()
+            
+            losses = 0
+            for bet in bets:
+                if bet.result == "lost":
+                    losses += 1
+                elif bet.result == "won":
+                    break
+            return losses
+    except Exception as e:
+        logger.error(f"Error getting consecutive losses: {e}")
+        return 0
+
+
+async def check_daily_loss_limit() -> bool:
+    """Phase 4: Check if daily loss limit (SystemConfig) has been reached."""
+    try:
+        from backend.database import AsyncSessionLocal
+        from backend.models import Bet, SystemConfig
+        from sqlalchemy import select, func
+        from datetime import datetime, time
+        
+        async with AsyncSessionLocal() as db:
+            # 1. Get limit from config
+            cfg_stmt = select(SystemConfig).where(SystemConfig.key == "max_daily_loss")
+            cfg = (await db.execute(cfg_stmt)).scalar_one_or_none()
+            limit = float(cfg.value) if cfg else 500.0 # Default limit
+            
+            # 2. Sum today's losses
+            today_start = datetime.combine(datetime.utcnow().date(), time.min)
+            stmt = select(Bet).where(Bet.settled_at >= today_start, Bet.result != "pending")
+            result = await db.execute(stmt)
+            bets = result.scalars().all()
+            
+            daily_pnl = sum((bet.actual_payout - bet.stake) for bet in bets)
+            if daily_pnl <= -limit:
+                logger.warning(f"Daily loss limit reached: {daily_pnl:.2f} <= -{limit}")
+                return True
+            return False
+    except Exception as e:
+        logger.error(f"Error checking daily loss limit: {e}")
+        return False
 
 
 
@@ -190,6 +362,15 @@ def start_scheduler() -> AsyncIOScheduler:
         trigger=IntervalTrigger(minutes=30),
         id="news_weather",
         name="Team news and weather monitor",
+        replace_existing=True,
+    )
+
+    # Stale Odds Check every 30 minutes
+    scheduler.add_job(
+        job_check_stale_odds,
+        trigger=IntervalTrigger(minutes=30),
+        id="stale_odds",
+        name="Stale odds detector",
         replace_existing=True,
     )
 
