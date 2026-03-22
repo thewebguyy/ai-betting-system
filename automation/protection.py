@@ -35,7 +35,6 @@ async def check_drawdown_protection():
         # Helper to upsert config
         async def set_config(k, v):
             # For cross-DB support (since we might be on SQLite locally)
-            from sqlalchemy import merge
             stmt = select(SystemConfig).where(SystemConfig.key == k)
             res = await db.execute(stmt)
             obj = res.scalar_one_or_none()

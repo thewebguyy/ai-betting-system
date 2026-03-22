@@ -8,7 +8,7 @@ PRAGMA foreign_keys=ON;
 
 -- ── Leagues / Competitions ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS recommendations (
-    id              INTEGER PRIMARY KEY AUTO_INCREMENT,
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
     match_id        INTEGER NOT NULL,
     value_bet_id    INTEGER NOT NULL,
     category        TEXT NOT NULL,

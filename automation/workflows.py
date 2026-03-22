@@ -36,21 +36,68 @@ async def job_daily_scan():
         raw_fixtures = await fetch_fixtures(league_id=39, season=2024)
         source = get_active_source()
         async with AsyncSessionLocal() as db:
-            for raw in raw_fixtures[:50]:
-                norm = normalise_fixture(raw, source)
-                # Upsert match
+            for fixture_data in raw_fixtures[:50]:
+                norm = normalise_fixture(fixture_data, source)
+                
+                # 1. Upsert League
+                league_api_id = norm.get("league_id")
+                from backend.models import League, Team
+                res_l = await db.execute(select(League).where(League.api_id == league_api_id))
+                league = res_l.scalar_one_or_none()
+                if not league:
+                    league = League(api_id=league_api_id, name=f"League {league_api_id}", season=norm.get("season"))
+                    db.add(league)
+                    await db.flush()
+
+                # 2. Upsert Home Team
+                home_api_id = norm.get("home_team_api_id")
+                res_h = await db.execute(select(Team).where(Team.api_id == home_api_id))
+                home_team = res_h.scalar_one_or_none()
+                if not home_team:
+                    home_team = Team(api_id=home_api_id, name=norm.get("home_team"), league_id=league.id)
+                    db.add(home_team)
+                    await db.flush()
+
+                # 3. Upsert Away Team
+                away_api_id = norm.get("away_team_api_id")
+                res_a = await db.execute(select(Team).where(Team.api_id == away_api_id))
+                away_team = res_a.scalar_one_or_none()
+                if not away_team:
+                    away_team = Team(api_id=away_api_id, name=norm.get("away_team"), league_id=league.id)
+                    db.add(away_team)
+                    await db.flush()
+
+                # 4. Upsert match
                 result = await db.execute(
                     select(Match).where(Match.api_id == norm["api_id"])
                 )
                 existing = result.scalar_one_or_none()
+                
+                # Ensure date is parsed if it's a string
+                m_date = norm["match_date"]
+                if isinstance(m_date, str):
+                    try:
+                        from dateutil.parser import parse
+                        m_date = parse(m_date)
+                    except:
+                        pass # Fallback to original string if parse fails
+
                 if not existing:
                     match = Match(
                         api_id=norm["api_id"],
-                        match_date=norm["match_date"],
+                        league_id=league.id,
+                        home_team_id=home_team.id,
+                        away_team_id=away_team.id,
+                        match_date=m_date,
                         status="scheduled",
                         venue=norm.get("venue", ""),
                     )
                     db.add(match)
+                else:
+                    # Update existing match team IDs just in case they were missing
+                    existing.home_team_id = home_team.id
+                    existing.away_team_id = away_team.id
+                    existing.league_id = league.id
             await db.commit()
 
         # Scrape odds
@@ -289,6 +336,7 @@ async def get_consecutive_losses() -> int:
                 elif bet.result == "won":
                     break
             return losses
+        return 0 # Fallback if no bets found
     except Exception as e:
         logger.error(f"Error getting consecutive losses: {e}")
         return 0

@@ -126,14 +126,24 @@ async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         from backend.database import AsyncSessionLocal
-        from backend.models import Match, ValueBet
+        from backend.models import Match, ValueBet, Team
         from sqlalchemy import select, or_
+        from sqlalchemy.orm import joinedload, aliased
         
         async with AsyncSessionLocal() as db:
-            stmt = select(Match).where(
-                or_(Match.home_team.ilike(f"%{query}%"), Match.away_team.ilike(f"%{query}%")),
-                Match.match_date > datetime.utcnow()
-            ).limit(1)
+            Home = aliased(Team)
+            Away = aliased(Team)
+            stmt = (
+                select(Match)
+                .join(Home, Match.home_team)
+                .join(Away, Match.away_team)
+                .where(
+                    or_(Home.name.ilike(f"%{query}%"), Away.name.ilike(f"%{query}%")),
+                    Match.match_date > datetime.utcnow()
+                )
+                .options(joinedload(Match.home_team), joinedload(Match.away_team))
+                .limit(1)
+            )
             match = (await db.execute(stmt)).scalar_one_or_none()
             
             if not match:
@@ -144,7 +154,7 @@ async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
             vb_stmt = select(ValueBet).where(ValueBet.match_id == match.id).order_by(ValueBet.intelligence_score.desc()).limit(3)
             vbs = (await db.execute(vb_stmt)).scalars().all()
             
-            response = f"<b>🏟 {match.home_team} vs {match.away_team}</b>\n"
+            response = f"<b>🏟 {match.home_team.name} vs {match.away_team.name}</b>\n"
             response += f"📅 {match.match_date.strftime('%d %b %H:%M')} UTC\n\n"
             
             if not vbs:
@@ -281,7 +291,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         success = await set_user_tier(target_id, new_tier)
         await update.message.reply_text(f"Success: {success} for {target_id} -> {new_tier}")
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def error_handler(update: Optional[Update], context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and notify the user."""
     logger.error(f"Exception while handling an update: {context.error}")
     if isinstance(update, Update) and update.message:

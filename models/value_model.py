@@ -166,6 +166,8 @@ def detect_value_from_odds(
     home_attack: float, home_defence: float,
     away_attack: float, away_defence: float,
     home_odds: float, draw_odds: Optional[float], away_odds: float,
+    home_elo: float = 1500.0,
+    away_elo: float = 1500.0,
     weather_str: str = "",
     bookmaker: str = "bet365",
     match_id: Optional[int] = None,
@@ -179,8 +181,8 @@ def detect_value_from_odds(
     """
     # Get ensemble predictions
     pred = ensemble_predict(
-        home_elo=1500, # Fallback, should ideally be passed in
-        away_elo=1500,
+        home_elo=home_elo,
+        away_elo=away_elo,
         home_attack=home_attack, home_defence=home_defence,
         away_attack=away_attack, away_defence=away_defence,
         weather_str=weather_str
@@ -315,6 +317,8 @@ async def detect_value_bets_for_upcoming():
                     home_defence=match.home_team.defence_strength if match.home_team else 1.0,
                     away_attack=match.away_team.attack_strength if match.away_team else 1.0,
                     away_defence=match.away_team.defence_strength if match.away_team else 1.0,
+                    home_elo=match.home_team.elo_rating if match.home_team else 1500.0,
+                    away_elo=match.away_team.elo_rating if match.away_team else 1500.0,
                     weather_str=match.weather or "",
                     home_odds=best_prices["Home"][0],
                     draw_odds=best_prices["Draw"][0],

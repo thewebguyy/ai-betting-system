@@ -25,10 +25,10 @@ class ScoredBet:
 
 @dataclass
 class DailyRecommendation:
-    safe_bets: List[ScoredBet] = field(default_factory=list)
-    sniper_bets: List[ScoredBet] = field(default_factory=list)
-    aggressive_bets: List[ScoredBet] = field(default_factory=list)
-    avoid_list: List[ScoredBet] = field(default_factory=list)
+    safe_bets: List[Dict[str, Any]] = field(default_factory=list)
+    sniper_bets: List[Dict[str, Any]] = field(default_factory=list)
+    aggressive_bets: List[Dict[str, Any]] = field(default_factory=list)
+    avoid_list: List[Dict[str, Any]] = field(default_factory=list)
     claude_brief: str = ""
     total_bets_analyzed: int = 0
     bankroll: float = 1000.0
@@ -52,8 +52,9 @@ class BettingBrain:
         try:
             async with AsyncSessionLocal() as db:
                 # 1. Fetch recommendations for upcoming matches
+                from sqlalchemy.orm import joinedload
                 now = datetime.utcnow()
-                stmt = select(Recommendation).join(ValueBet).join(Match).where(
+                stmt = select(Recommendation).options(joinedload(Recommendation.value_bet)).join(ValueBet).join(Match).where(
                     Match.match_date > now,
                     Recommendation.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0)
                 )
