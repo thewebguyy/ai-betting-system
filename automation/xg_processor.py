@@ -7,6 +7,7 @@ from loguru import logger
 from sqlalchemy import select, update, func
 from backend.database import AsyncSessionLocal
 from backend.models import Team, Match, TeamMatchStats
+from backend.utils import is_same_team
 from scrapers.understat_scraper import fetch_understat_league_results
 from datetime import datetime, timedelta
 
@@ -50,48 +51,55 @@ async def update_xg_stats(results: list):
             a_goals = int(res['goals']['a'])
 
             # 1. Find the teams in our DB
-            from backend.models import Team
-            h_team = (await db.execute(select(Team).where(
-                (Team.name.ilike(f"%{h_name}%")) | (Team.name.ilike(f"%{h_name.split(' ')[0]}%"))
-            ))).scalar_one_or_none()
+            all_teams_res = await db.execute(select(Team))
+            all_teams = all_teams_res.scalars().all()
             
-            a_team = (await db.execute(select(Team).where(
-                (Team.name.ilike(f"%{a_name}%")) | (Team.name.ilike(f"%{a_name.split(' ')[0]}%"))
-            ))).scalar_one_or_none()
+            h_team = next((tx for tx in all_teams if is_same_team(tx.name, h_name)), None)
+            a_team = next((tx for tx in all_teams if is_same_team(tx.name, a_name)), None)
 
             if not h_team or not a_team:
+                logger.debug(f"Could not link {h_name} or {a_name}")
                 continue
 
-            # 2. Find the Match by date and teams
-            match = (await db.execute(select(Match).where(
-                Match.home_team_id == h_team.id,
-                Match.away_team_id == a_team.id,
+            # 2. Narrow types for the query
+            h_id: int = h_team.id
+            a_id: int = a_team.id
+
+            # 3. Find the Match by date and teams
+            match_res = await db.execute(select(Match).where(
+                Match.home_team_id == h_id,
+                Match.away_team_id == a_id,
                 func.date(Match.match_date) == match_date
-            ))).scalar_one_or_none()
+            ))
+            match = match_res.scalar_one_or_none()
 
             if not match:
                 continue
 
-            # 3. Upsert stats for Home team
-            h_stats = (await db.execute(select(TeamMatchStats).where(
-                TeamMatchStats.match_id == match.id,
-                TeamMatchStats.team_id == h_team.id
-            ))).scalar_one_or_none()
+            m_id: int = match.id
+
+            # 4. Upsert stats for Home team
+            h_stats_res = await db.execute(select(TeamMatchStats).where(
+                TeamMatchStats.match_id == m_id,
+                TeamMatchStats.team_id == h_id
+            ))
+            h_stats = h_stats_res.scalar_one_or_none()
             if not h_stats:
-                h_stats = TeamMatchStats(match_id=match.id, team_id=h_team.id)
+                h_stats = TeamMatchStats(match_id=m_id, team_id=h_id)
                 db.add(h_stats)
             h_stats.xg_for = h_xg
             h_stats.xg_against = a_xg
             h_stats.goals_for = h_goals
             h_stats.goals_against = a_goals
 
-            # 4. Upsert stats for Away team
-            a_stats = (await db.execute(select(TeamMatchStats).where(
-                TeamMatchStats.match_id == match.id,
-                TeamMatchStats.team_id == a_team.id
-            ))).scalar_one_or_none()
+            # 5. Upsert stats for Away team
+            a_stats_res = await db.execute(select(TeamMatchStats).where(
+                TeamMatchStats.match_id == m_id,
+                TeamMatchStats.team_id == a_id
+            ))
+            a_stats = a_stats_res.scalar_one_or_none()
             if not a_stats:
-                a_stats = TeamMatchStats(match_id=match.id, team_id=a_team.id)
+                a_stats = TeamMatchStats(match_id=m_id, team_id=a_id)
                 db.add(a_stats)
             a_stats.xg_for = a_xg
             a_stats.xg_against = h_xg

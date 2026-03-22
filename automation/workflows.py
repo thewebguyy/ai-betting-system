@@ -100,6 +100,16 @@ async def job_daily_scan():
                     existing.league_id = league.id
             await db.commit()
 
+        # Step 5: Seed xG data if needed (if no stats exist)
+        from backend.models import TeamMatchStats
+        from sqlalchemy import func
+        async with AsyncSessionLocal() as db:
+            count_res = await db.execute(select(func.count(TeamMatchStats.id)))
+            if count_res.scalar() == 0:
+                logger.info("[Scheduler] Seeding historical xG data from Understat…")
+                from automation.xg_processor import process_all_leagues_xg
+                await process_all_leagues_xg()
+
         # Scrape odds
         await scrape_all_bookmakers()
 

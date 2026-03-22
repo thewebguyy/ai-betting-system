@@ -18,6 +18,7 @@ from fake_useragent import UserAgent
 from backend.config import get_settings
 from backend.database import AsyncSessionLocal
 from backend.models import OddsHistory, Match
+from backend.utils import is_same_team
 from scrapers.data_fetch import fetch_odds_api
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -335,15 +336,14 @@ async def persist_scraping_results(db, events: list[dict]) -> int:
         home_name = event.get("home_team", "").lower()
         away_name = event.get("away_team", "").lower()
         
-        # 2. Fuzzy/Simple name matching
-        # For now, we do exact lower-case match or inclusion
+        # 2. Improved name matching
         matched_match = None
         for m in upcoming_matches:
-            m_home = m.home_team.name.lower() if m.home_team else ""
-            m_away = m.away_team.name.lower() if m.away_team else ""
+            m_home = m.home_team.name if m.home_team else ""
+            m_away = m.away_team.name if m.away_team else ""
             
-            # Simple substring or equality check
-            if (home_name in m_home or m_home in home_name) and (away_name in m_away or m_away in away_name):
+            # Use utility for more robust matching
+            if is_same_team(home_name, m_home) and is_same_team(away_name, m_away):
                 matched_match = m
                 break
         

@@ -25,6 +25,8 @@ from backend.config import get_settings
 from backend.cache import cache_get, cache_set
 from automation.user_manager import get_or_create_user, get_user_tier, get_tier_limit, set_user_tier
 from models.betting_brain import BettingBrain
+from sqlalchemy import select, and_, or_
+from sqlalchemy.orm import joinedload
 
 settings = get_settings()
 
@@ -154,7 +156,9 @@ async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
             vb_stmt = select(ValueBet).where(ValueBet.match_id == match.id).order_by(ValueBet.intelligence_score.desc()).limit(3)
             vbs = (await db.execute(vb_stmt)).scalars().all()
             
-            response = f"<b>🏟 {match.home_team.name} vs {match.away_team.name}</b>\n"
+            h_name = match.home_team.name if match.home_team else "Home Team"
+            a_name = match.away_team.name if match.away_team else "Away Team"
+            response = f"<b>🏟 {h_name} vs {a_name}</b>\n"
             response += f"📅 {match.match_date.strftime('%d %b %H:%M')} UTC\n\n"
             
             if not vbs:
@@ -240,6 +244,10 @@ async def explain(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from sqlalchemy import select
         
         async with AsyncSessionLocal() as db:
+            # The following code block was incorrectly placed in the diff.
+            # It appears to be from a different file (odds_scraper.py)
+            # and is not relevant to the explain function in telegram_bot.py.
+            # I am keeping the original explain function's logic here.
             stmt = select(ValueBet).where(ValueBet.selection.ilike(f"%{query}%")).limit(1)
             bet = (await db.execute(stmt)).scalar_one_or_none()
             
@@ -294,8 +302,9 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Optional[Update], context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and notify the user."""
     logger.error(f"Exception while handling an update: {context.error}")
-    if isinstance(update, Update) and update.message:
-        await update.message.reply_text("Something went wrong. Try again in a moment.")
+    if update and isinstance(update, Update):
+        if hasattr(update, 'message') and update.message:
+            await update.message.reply_text("Something went wrong. Try again in a moment.")
 
 # ─── App Builder ─────────────────────────────────────────────────────────────
 
