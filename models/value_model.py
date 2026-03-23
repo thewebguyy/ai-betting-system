@@ -115,16 +115,20 @@ def calculate_ev_kelly(
 
 def calculate_intelligence_score(
     ev: float,
-    confidence: float,
+    match_count: int,
     overround: float,
     risks_found: bool = False
 ) -> float:
     """
-    Intelligence Score = (EV * 0.4) + (Confidence * 0.3) + (Vig-Adjustment * 0.2) + (News-Factor * 0.1)
+    Intelligence Score = (EV * 0.4) + (Data Depth * 0.3) + (Vig-Adjustment * 0.2) + (News-Factor * 0.1)
     Normalized to 0.0 - 1.0 range.
     """
     # EV usually -1.0 to 2.0. Scale to 0-1 for scoring.
     ev_score = min(1.0, max(0.0, ev * 5.0)) # 0.2 EV = 100% score for this component
+    
+    # Data Depth: Higher is better. Scales to 1.0 at 30+ matches of history.
+    # Replaces 'Monte Carlo CI' which gave false precision.
+    data_score = min(1.0, max(0.0, match_count / 30.0))
     
     # Vig-Adjustment: Lower overround is better.
     # Typical overround 0.03 to 0.15.
@@ -133,7 +137,7 @@ def calculate_intelligence_score(
     # News-Factor
     news_score = 0.5 if risks_found else 1.0
     
-    score = (ev_score * 0.4) + (confidence * 0.3) + (vig_score * 0.2) + (news_score * 0.1)
+    score = (ev_score * 0.4) + (data_score * 0.3) + (vig_score * 0.2) + (news_score * 0.1)
     return round(score, 4)
 
 
@@ -227,7 +231,7 @@ def detect_value_from_odds(
             
             intel_score = calculate_intelligence_score(
                 ev=ev,
-                confidence=confidence,
+                match_count=min(home_match_count, away_match_count),
                 overround=vig["overround"],
                 risks_found=risks
             )

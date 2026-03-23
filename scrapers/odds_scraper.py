@@ -128,6 +128,12 @@ async def scrape_sportybet_playwright(sport: str = "football") -> list[dict]:
     """
     Playwright headless scraper for SportyBet (fallback / additional source).
     NOTE: SportyBet's DOM changes frequently; update selectors as needed.
+    
+    WARNING (Architecture): Jittered sleep and stealth plugins are stop-gap measures. 
+    Modern anti-scraping systems use browser fingerprinting and behavioral analysis.
+    This component is inherently brittle and risky for production.
+    TODO: The robust fix is migrating entirely to official API tiers (e.g. The Odds API).
+    
     Returns list of raw match dicts.
     """
     url = SPORTYBET_SPORT_URLS.get(sport, SPORTYBET_SPORT_URLS["football"])
@@ -262,6 +268,8 @@ async def scrape_bet9ja_xhr() -> list[dict]:
 async def scrape_generic_playwright(bookmaker: str) -> list[dict]:
     """
     Generic Playwright scraper for 1xBet, Melbet, etc.
+    WARNING: Like the SportyBet scraper, this is brittle and subject to IP bans 
+    despite randomized delays. Move to paid API feeds as soon as budget permits.
     """
     url = GENERIC_BOOKMAKER_URLS.get(bookmaker)
     if not url: return []

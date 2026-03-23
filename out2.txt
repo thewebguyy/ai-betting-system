@@ -1,0 +1,31 @@
+﻿python : 2026-03-23 
+22:03:03.796 | INFO     | 
+__main__:run_backtest:53 - 
+Starting Monte Carlo 
+Backtesting Harness...
+At line:1 char:1
++ python 
+scripts/backtest.py > 
+out.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (2026-  
+  03-23 22:0...ting Harne   
+ ss...:String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+2026-03-23 22:03:03,803 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-03-23 22:03:03,823 INFO sqlalchemy.engine.Engine SELECT matches.id, matches.api_id, matches.league_id, matches.home_team_id, matches.away_team_id, matches.match_date, matches.status, matches.home_score, matches.away_score, matches.home_form, matches.away_form, matches.home_injuries, matches.away_injuries, matches.weather, matches.venue, matches.model_home_prob, matches.model_draw_prob, matches.model_away_prob, matches.referee_avg_goals, matches.referee_avg_cards, matches.created_at, matches.updated_at 
+FROM matches 
+WHERE matches.status = ? AND matches.home_score IS NOT NULL AND matches.away_score IS NOT NULL
+2026-03-23 22:03:03,823 INFO sqlalchemy.engine.Engine [generated in 0.00030s] ('finished',)
+2026-03-23 22:03:03.825 | 
+WARNING  | 
+__main__:run_backtest:69 - 
+No settled matches found in 
+the database. Run fetch 
+tasks to populate history.
+2026-03-23 22:03:03,826 INFO sqlalchemy.engine.Engine ROLLBACK

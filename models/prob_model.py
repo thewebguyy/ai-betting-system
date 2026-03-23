@@ -65,17 +65,28 @@ def elo_to_prob(home_elo: float, away_elo: float) -> tuple[float, float, float]:
 
 
 # ─── Poisson Model ────────────────────────────────────────────────────────────
-def poisson_probs(lambda_home: float, lambda_away: float, max_goals: int = 6) -> tuple[float, float, float]:
+def poisson_probs(lambda_home: float, lambda_away: float, max_goals: int = 6, rho: float = -0.10) -> tuple[float, float, float]:
     """
-    Compute 1X2 probabilities from Poisson goal expectations.
-    lambda_home: expected goals for home team
-    lambda_away: expected goals for away team
+    Compute 1X2 probabilities from Poisson goal expectations with Dixon-Coles tau correction 
+    which accounts for the dependency between low scores (boosts 0-0 and 1-1 draws).
+    rho < 0 boosts draws, common empirical values are around -0.1.
     """
     home_win = draw = away_win = 0.0
 
     for h in range(max_goals + 1):
         for a in range(max_goals + 1):
             p = poisson.pmf(h, lambda_home) * poisson.pmf(a, lambda_away)
+            
+            # Dixon-Coles correction for low scores
+            if h == 0 and a == 0:
+                p *= max(0, 1 - lambda_home * lambda_away * rho)
+            elif h == 0 and a == 1:
+                p *= max(0, 1 + lambda_home * rho)
+            elif h == 1 and a == 0:
+                p *= max(0, 1 + lambda_away * rho)
+            elif h == 1 and a == 1:
+                p *= max(0, 1 - rho)
+
             if h > a:
                 home_win += p
             elif h == a:
@@ -307,11 +318,11 @@ def ensemble_predict(
         "home": float, "draw": float, "away": float,
         "lambda_h": float, "lambda_a": float,
         "confidence": float,
-        "is_sufficient": bool,   # True if both teams have >= 5 games of history
+        "is_sufficient": bool,   # True if both teams have >= 10 games of history (statistically meaningful)
         "model_source": "ensemble"
     }
     """
-    is_sufficient = (home_match_count >= 5 and away_match_count >= 5)
+    is_sufficient = (home_match_count >= 10 and away_match_count >= 10)
     # 1. Dixon-Coles Poisson
     lh, la = estimate_lambda(home_attack, home_defence, away_attack, away_defence)
     p_h_pois, p_d_pois, p_a_pois = poisson_probs(lh, la)

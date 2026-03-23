@@ -79,11 +79,17 @@ async def track_closing_odds():
                                         if bm.get('key') == 'pinnacle':
                                             pinnacle_price = price
 
-                # Logic: Pinnacle first (sharpest), then market average
+                # LOGIC: Pinnacle is the gold standard for CLV because of minimal margin.
+                # If we use a market average (including softer books), it's a methodological downgrade
+                # that measures "did we beat recreational money", not true true probability edge.
                 final_closing = pinnacle_price
                 if not final_closing and closing_prices:
                     final_closing = sum(closing_prices) / len(closing_prices)
-                    logger.debug(f"Pinnacle missing for Bet {bet.id}; using market average ({len(closing_prices)} bookies)")
+                    logger.warning(
+                        f"METHODOLOGICAL DOWNGRADE: Pinnacle missing for Bet {bet.id}. "
+                        f"Using market average of {len(closing_prices)} bookies for CLV calculation. "
+                        f"This is a less informative signal."
+                    )
                 
                 if final_closing:
                     bet.closing_odds = round(final_closing, 3)
