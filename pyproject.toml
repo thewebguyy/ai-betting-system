@@ -1,0 +1,9 @@
+[tool.pyright]
+include = ["."]
+extraPaths = ["."]
+typeCheckingMode = "basic"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
