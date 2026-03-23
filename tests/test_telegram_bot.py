@@ -4,8 +4,14 @@ Mocks Telegram updates to verify bot command handlers and tier gating.
 """
 
 import pytest
+import sys
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+
+# Add project root to path for internal imports
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from telegram import Update, User as TGUser, Message, Chat
 from telegram.ext import ContextTypes
 

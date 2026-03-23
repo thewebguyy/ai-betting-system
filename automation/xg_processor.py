@@ -57,54 +57,49 @@ async def update_xg_stats(results: list):
             h_team = next((tx for tx in all_teams if is_same_team(tx.name, h_name)), None)
             a_team = next((tx for tx in all_teams if is_same_team(tx.name, a_name)), None)
 
-            if not h_team or not a_team:
-                logger.debug(f"Could not link {h_name} or {a_name}")
-                continue
+            if h_team is not None and a_team is not None:
+                # 2. Narrow types for the query
+                h_id: int = h_team.id
+                a_id: int = a_team.id
 
-            # 2. Narrow types for the query
-            h_id: int = h_team.id
-            a_id: int = a_team.id
+                # 3. Find the Match by date and teams
+                match_res = await db.execute(select(Match).where(
+                    Match.home_team_id == h_id,
+                    Match.away_team_id == a_id,
+                    func.date(Match.match_date) == match_date
+                ))
+                match = match_res.scalar_one_or_none()
 
-            # 3. Find the Match by date and teams
-            match_res = await db.execute(select(Match).where(
-                Match.home_team_id == h_id,
-                Match.away_team_id == a_id,
-                func.date(Match.match_date) == match_date
-            ))
-            match = match_res.scalar_one_or_none()
+                if match is not None:
+                    m_id: int = match.id
 
-            if not match:
-                continue
+                    # 4. Upsert stats for Home team
+                    h_stats_res = await db.execute(select(TeamMatchStats).where(
+                        TeamMatchStats.match_id == m_id,
+                        TeamMatchStats.team_id == h_id
+                    ))
+                    h_stats = h_stats_res.scalar_one_or_none()
+                    if not h_stats:
+                        h_stats = TeamMatchStats(match_id=m_id, team_id=h_id)
+                        db.add(h_stats)
+                    h_stats.xg_for = h_xg
+                    h_stats.xg_against = a_xg
+                    h_stats.goals_for = h_goals
+                    h_stats.goals_against = a_goals
 
-            m_id: int = match.id
-
-            # 4. Upsert stats for Home team
-            h_stats_res = await db.execute(select(TeamMatchStats).where(
-                TeamMatchStats.match_id == m_id,
-                TeamMatchStats.team_id == h_id
-            ))
-            h_stats = h_stats_res.scalar_one_or_none()
-            if not h_stats:
-                h_stats = TeamMatchStats(match_id=m_id, team_id=h_id)
-                db.add(h_stats)
-            h_stats.xg_for = h_xg
-            h_stats.xg_against = a_xg
-            h_stats.goals_for = h_goals
-            h_stats.goals_against = a_goals
-
-            # 5. Upsert stats for Away team
-            a_stats_res = await db.execute(select(TeamMatchStats).where(
-                TeamMatchStats.match_id == m_id,
-                TeamMatchStats.team_id == a_id
-            ))
-            a_stats = a_stats_res.scalar_one_or_none()
-            if not a_stats:
-                a_stats = TeamMatchStats(match_id=m_id, team_id=a_id)
-                db.add(a_stats)
-            a_stats.xg_for = a_xg
-            a_stats.xg_against = h_xg
-            a_stats.goals_for = a_goals
-            a_stats.goals_against = h_goals
+                    # 5. Upsert stats for Away team
+                    a_stats_res = await db.execute(select(TeamMatchStats).where(
+                        TeamMatchStats.match_id == m_id,
+                        TeamMatchStats.team_id == a_id
+                    ))
+                    a_stats = a_stats_res.scalar_one_or_none()
+                    if not a_stats:
+                        a_stats = TeamMatchStats(match_id=m_id, team_id=a_id)
+                        db.add(a_stats)
+                    a_stats.xg_for = a_xg
+                    a_stats.xg_against = h_xg
+                    a_stats.goals_for = a_goals
+                    a_stats.goals_against = h_goals
 
         await db.commit()
 

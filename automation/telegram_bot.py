@@ -291,13 +291,15 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "👥 <b>User Stats</b>\n"
             for tier, count in stats:
                 text += f"• {tier}: {count}\n"
-            await update.message.reply_html(text)
+            if update and update.message:
+                await update.message.reply_html(text)
     
     elif cmd == "settier" and len(context.args) == 3:
         target_id = context.args[1]
         new_tier = context.args[2]
         success = await set_user_tier(target_id, new_tier)
-        await update.message.reply_text(f"Success: {success} for {target_id} -> {new_tier}")
+        if update and update.message:
+            await update.message.reply_text(f"Success: {success} for {target_id} -> {new_tier}")
 
 async def error_handler(update: Optional[Update], context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and notify the user."""
