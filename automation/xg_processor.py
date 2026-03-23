@@ -6,7 +6,7 @@ Processes xG data from Understat and updates team strengths.
 from loguru import logger
 from sqlalchemy import select, update, func
 from backend.database import AsyncSessionLocal
-from backend.models import Team, Match, TeamMatchStats
+from backend.models import Team, Match, TeamMatchStats, League
 from backend.utils import is_same_team
 from scrapers.understat_scraper import fetch_understat_league_results
 from datetime import datetime, timedelta
@@ -106,17 +106,26 @@ async def update_xg_stats(results: list):
 
 async def recalculate_team_strengths():
     """
-    Calculate attack/defence strengths with recency decay.
+    Calculate attack/defence strengths with recency decay, normalized by league.
     """
     async with AsyncSessionLocal() as db:
+        # 1. Fetch all leagues and calculate their specific xG averages
+        leagues_res = await db.execute(select(League))
+        leagues = leagues_res.scalars().all()
+        
+        league_averages = {}
+        for lg in leagues:
+            avg_res = await db.execute(
+                select(func.avg(TeamMatchStats.xg_for))
+                .join(Match, Match.id == TeamMatchStats.match_id)
+                .where(Match.league_id == lg.id)
+            )
+            val = avg_res.scalar()
+            league_averages[lg.id] = float(val) if val is not None else 1.35
+
+        # 2. Update each team's strengths relative to its league average
         teams_result = await db.execute(select(Team))
         teams = teams_result.scalars().all()
-        
-        # Get league averages first
-        avg_result = await db.execute(
-            select(func.avg(TeamMatchStats.xg_for))
-        )
-        league_avg_xg = avg_result.scalar() or 1.3
         
         for team in teams:
             # Get last 10 matches for this team
@@ -129,16 +138,20 @@ async def recalculate_team_strengths():
             rows = stats_result.scalars().all()
             if not rows: continue
             
-            # Weighting: 1.0 for most recent, decreasing by 0.1 for each previous
-            weights = [1.0 - (i * 0.1) for i in range(len(rows))]
+            # Weighting: recency decay
+            weights = [1.0 - (i * 0.05) for i in range(len(rows))] # Slower decay
             total_weight = sum(weights)
             
             weighted_xg_for = sum(r.xg_for * w for r, w in zip(rows, weights)) / total_weight
             weighted_xg_against = sum(r.xg_against * w for r, w in zip(rows, weights)) / total_weight
+            
+            # Use league-specific benchmark
+            lg_id = team.league_id
+            league_avg_xg = league_averages.get(lg_id, 1.35)
             
             # Strength = team_avg / league_avg
             team.attack_strength = round(weighted_xg_for / league_avg_xg, 4)
             team.defence_strength = round(weighted_xg_against / league_avg_xg, 4)
             
         await db.commit()
-    logger.info("Team strengths recalculated with recency decay.")
+    logger.info("Team strengths recalculated with league-aware normalization.")

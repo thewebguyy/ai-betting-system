@@ -45,40 +45,53 @@ async def track_closing_odds():
                 # Fetch closing odds (using Pinnacle as the gold standard for CLV)
                 raw_odds = await fetch_odds_api(sport="soccer_epl", regions="uk,eu", markets="h2h")
                 
-                # Find matching match and bookmaker (Pinnacle)
-                closing_price = None
+                # Find matching match and determine closing price
+                closing_prices = []
+                pinnacle_price = None
+                
                 for event in raw_odds:
                     if event.get('id') == match.api_id:
                         for bm in event.get('bookmakers', []):
-                            if bm.get('key') == 'pinnacle':
-                                for mkt in bm.get('markets', []):
-                                    if mkt.get('key') == 'h2h':
-                                        outcomes = {o['name']: o['price'] for o in mkt.get('outcomes', [])}
+                            for mkt in bm.get('markets', []):
+                                if mkt.get('key') == 'h2h':
+                                    outcomes = {o['name']: o['price'] for o in mkt.get('outcomes', [])}
+                                    
+                                    # Map selection name
+                                    target_name = bet.selection
+                                    if bet.selection == "Home" and match.home_team:
+                                        target_name = match.home_team.name
+                                    elif bet.selection == "Away" and match.away_team:
+                                        target_name = match.away_team.name
+                                    elif bet.selection == "Draw":
+                                        target_name = "Draw"
                                         
-                                        # Map selection name to actual team name
-                                        target_name = bet.selection
-                                        if bet.selection == "Home" and match.home_team:
-                                            target_name = match.home_team.name
-                                        elif bet.selection == "Away" and match.away_team:
-                                            target_name = match.away_team.name
-                                        elif bet.selection == "Draw":
-                                            target_name = "Draw"
-                                            
-                                        # Some bookies use specific suffixes or prefixes; fuzzy match if exact fails
-                                        closing_price = outcomes.get(target_name)
-                                        if not closing_price:
-                                            # Fuzzy fallback
-                                            for name, price in outcomes.items():
-                                                if target_name in name or name in target_name:
-                                                    closing_price = price
-                                                    break
-                                        break
+                                    # Find the price for our selection
+                                    price = outcomes.get(target_name)
+                                    if not price:
+                                        # Fuzzy match fallback
+                                        for name, p in outcomes.items():
+                                            if target_name.lower() in name.lower() or name.lower() in target_name.lower():
+                                                price = p
+                                                break
+                                    
+                                    if price:
+                                        closing_prices.append(price)
+                                        if bm.get('key') == 'pinnacle':
+                                            pinnacle_price = price
+
+                # Logic: Pinnacle first (sharpest), then market average
+                final_closing = pinnacle_price
+                if not final_closing and closing_prices:
+                    final_closing = sum(closing_prices) / len(closing_prices)
+                    logger.debug(f"Pinnacle missing for Bet {bet.id}; using market average ({len(closing_prices)} bookies)")
                 
-                if closing_price:
-                    bet.closing_odds = closing_price
+                if final_closing:
+                    bet.closing_odds = round(final_closing, 3)
                     # CLV = (Opening Odds / Closing Odds) - 1
-                    bet.clv = round((bet.decimal_odds / closing_price) - 1, 4)
+                    bet.clv = round((bet.decimal_odds / final_closing) - 1, 4)
                     logger.info(f"CLV recorded for Bet {bet.id}: {bet.clv:+.2%}")
+                else:
+                    logger.warning(f"Could not find closing odds for Bet {bet.id}")
 
                 
             except Exception as e:

@@ -4,7 +4,8 @@ import { login as apiLogin } from './api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [isAuthenticated, setIsAuthenticated] = useState(true);
+    // Fix: Remove hardcoded true (security bypass)
+    const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('access_token'));
 
 
     const login = async (username, password) => {

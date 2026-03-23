@@ -52,23 +52,16 @@ def update_elo(rating_a: float, rating_b: float, score_a: float, k: float = ELO_
 def elo_to_prob(home_elo: float, away_elo: float) -> tuple[float, float, float]:
     """
     Convert ELO difference to win/draw/loss probabilities.
-    Uses logistic curve calibrated on empirical draw rates.
+    Replaced the arbitrary 27% heuristic with a principled Poisson-derived 
+    draw probability based on ELO-implied lambdas.
     """
-    home_win_p = expected_score(home_elo, away_elo)
-    away_win_p = 1 - expected_score(away_elo, home_elo, 0)  # no home advantage
-
-    # Insert draw probability (empirical draw rate ~27% for football)
-    draw_p = 0.27 * (1 - abs(home_win_p - away_win_p))
-
-    home_win_p -= draw_p * 0.5
-    away_win_p -= draw_p * 0.5
-
-    total = home_win_p + draw_p + away_win_p
-    return (
-        round(home_win_p / total, 4),
-        round(draw_p / total, 4),
-        round(away_win_p / total, 4),
-    )
+    # Map ELO difference to expected goals (lambdas)
+    diff = (home_elo + HOME_ADVANTAGE) - away_elo
+    # Baseline expected goals calibrated for typical ELO spreads
+    lh = max(0.5, 1.35 + (diff / 400))
+    la = max(0.5, 1.35 - (diff / 400))
+    
+    return poisson_probs(lh, la)
 
 
 # ─── Poisson Model ────────────────────────────────────────────────────────────
@@ -301,6 +294,8 @@ def ensemble_predict(
     away_attack: float, away_defence: float,
     home_form: Optional[str] = None,
     away_form: Optional[str] = None,
+    home_match_count: int = 0,
+    away_match_count: int = 0,
     weather_str: str = "",
 ) -> dict:
     """
@@ -309,14 +304,14 @@ def ensemble_predict(
 
     Returns:
     {
-        "home": float, "draw": float, "away": float,   # blended 1X2 probs
-        "lambda_h": float, "lambda_a": float,          # expected goals
-        "ou_over": float, "ou_under": float,           # O/U 2.5 probs
-        "btts": float,                                 # BTTS probability
-        "confidence": float,                           # 1 - MC CI width
+        "home": float, "draw": float, "away": float,
+        "lambda_h": float, "lambda_a": float,
+        "confidence": float,
+        "is_sufficient": bool,   # True if both teams have >= 5 games of history
         "model_source": "ensemble"
     }
     """
+    is_sufficient = (home_match_count >= 5 and away_match_count >= 5)
     # 1. Dixon-Coles Poisson
     lh, la = estimate_lambda(home_attack, home_defence, away_attack, away_defence)
     p_h_pois, p_d_pois, p_a_pois = poisson_probs(lh, la)
@@ -360,5 +355,6 @@ def ensemble_predict(
         "ou_under": p_under,
         "btts": p_btts,
         "confidence": round(confidence, 4),
+        "is_sufficient": is_sufficient,
         "model_source": "ensemble"
     }

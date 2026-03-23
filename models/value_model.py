@@ -168,11 +168,13 @@ def detect_value_from_odds(
     home_odds: float, draw_odds: Optional[float], away_odds: float,
     home_elo: float = 1500.0,
     away_elo: float = 1500.0,
+    home_match_count: int = 0,
+    away_match_count: int = 0,
     weather_str: str = "",
     bookmaker: str = "bet365",
     match_id: Optional[int] = None,
     bankroll: float = 1000.0,
-    kelly_fraction: float = 0.25,
+    kelly_fraction: float = 0.1, # Default to 1/10th for safety per critique
 ) -> tuple[list[dict], tuple[float, float, float]]:
 
     """
@@ -185,8 +187,15 @@ def detect_value_from_odds(
         away_elo=away_elo,
         home_attack=home_attack, home_defence=home_defence,
         away_attack=away_attack, away_defence=away_defence,
+        home_match_count=home_match_count,
+        away_match_count=away_match_count,
         weather_str=weather_str
     )
+    
+    # CRITICAL: If data is insufficient, we do NOT generate value bets
+    if not pred.get("is_sufficient", False):
+        return [], (pred["home"], pred["draw"], pred["away"])
+
     model_h, model_d, model_a = pred["home"], pred["draw"], pred["away"]
     confidence = pred["confidence"]
 
@@ -248,6 +257,9 @@ async def detect_value_bets_for_upcoming():
     Background task: scan all upcoming matches and their latest odds,
     run the model, store any value bets found, and send alerts.
     """
+    from backend.models import TeamMatchStats
+    from sqlalchemy import func
+    
     logger.info("Starting value bet scan…")
     detected_count = 0
 
@@ -305,13 +317,16 @@ async def detect_value_bets_for_upcoming():
                 if o.away_odds and o.away_odds > best_prices["Away"][0]:
                     best_prices["Away"] = (o.away_odds, o.bookmaker)
 
+            # Get match counts for both teams
+            hc_res = await db.execute(select(func.count(TeamMatchStats.id)).where(TeamMatchStats.team_id == match.home_team_id))
+            ac_res = await db.execute(select(func.count(TeamMatchStats.id)).where(TeamMatchStats.team_id == match.away_team_id))
+            home_count = hc_res.scalar() or 0
+            away_count = ac_res.scalar() or 0
+
             # Run detection on the best odds for each selection
-            # Note: We run detect_value_from_odds for each bookmaker that has a 'best' price
             for selection, (price, bm) in best_prices.items():
                 if price == 0: continue
                 
-                # We need a full set of odds (H/D/A) to remove vig correctly.
-                # Here we use the best price for current selection and best available for others.
                 vbs, (mh, md, ma) = detect_value_from_odds(
                     home_attack=match.home_team.attack_strength if match.home_team else 1.0,
                     home_defence=match.home_team.defence_strength if match.home_team else 1.0,
@@ -319,6 +334,8 @@ async def detect_value_bets_for_upcoming():
                     away_defence=match.away_team.defence_strength if match.away_team else 1.0,
                     home_elo=match.home_team.elo_rating if match.home_team else 1500.0,
                     away_elo=match.away_team.elo_rating if match.away_team else 1500.0,
+                    home_match_count=home_count,
+                    away_match_count=away_count,
                     weather_str=match.weather or "",
                     home_odds=best_prices["Home"][0],
                     draw_odds=best_prices["Draw"][0],

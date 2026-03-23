@@ -18,8 +18,7 @@ from fake_useragent import UserAgent
 from backend.config import get_settings
 from backend.database import AsyncSessionLocal
 from backend.models import OddsHistory, Match
-from backend.utils import is_same_team
-from scrapers.data_fetch import fetch_odds_api
+from backend.utils import is_same_team, jittered_sleep, jittered_goto
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -155,8 +154,7 @@ async def scrape_sportybet_playwright(sport: str = "football") -> list[dict]:
                 "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
             )
 
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await asyncio.sleep(2)
+            await jittered_goto(page, url)
 
             # generic extraction for SportyBet's current layout
             try:
@@ -191,7 +189,8 @@ async def scrape_sportybet_playwright(sport: str = "football") -> list[dict]:
                             "draw_odds": draw_odds,
                             "away_odds": away_odds,
                         })
-                    except Exception:
+                    except (ValueError, IndexError, AttributeError) as e:
+                        logger.debug(f"Row skip: {e}")
                         continue
             except Exception as e:
                 logger.warning(f"SportyBet selector error: {e}")
@@ -252,7 +251,8 @@ async def scrape_bet9ja_xhr() -> list[dict]:
                                 "draw_odds": float(d_odds) if d_odds else None,
                                 "away_odds": float(a_odds) if a_odds else None,
                             })
-                        except: continue
+                        except (KeyError, ValueError, IndexError, TypeError):
+                            continue
     except Exception as e:
         logger.error(f"Bet9ja XHR scrape failed: {e}")
         
@@ -273,8 +273,7 @@ async def scrape_generic_playwright(bookmaker: str) -> list[dict]:
             page = await browser.new_page(user_agent=ua.random)
             await page.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
             
-            await page.goto(url, wait_until="networkidle", timeout=60000)
-            await asyncio.sleep(5) # Allow dynamic content to load
+            await jittered_goto(page, url)
 
             # 1xBet/Melbet structure (complex, using generic selectors)
             # This is a representative sample; real implementation would be more robust
@@ -358,9 +357,19 @@ async def persist_scraping_results(db, events: list[dict]) -> int:
                 away_odds=event.get("away_odds"),
                 fetched_at=datetime.utcnow(),
             )
-            db.add(record)
             stored_count += 1
+        else:
+            logger.debug(f"Failed to match fixture: {home_name} vs {away_name} for {event['bookmaker']}")
             
+    # 3. Data Quality Monitoring
+    if events:
+        match_rate = stored_count / len(events)
+        if match_rate < 0.40:
+             logger.error(f"CRITICAL DATA QUALITY ISSUE: Match rate for {events[0]['bookmaker']} is only {match_rate:.1%}. Scrapers may need update!")
+             # Optional: Trigger notification
+        else:
+             logger.info(f"Odds mapped: {stored_count}/{len(events)} ({match_rate:.1%}) for {events[0]['bookmaker']}")
+
     await db.commit()
     return stored_count
 
