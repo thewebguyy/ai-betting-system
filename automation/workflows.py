@@ -186,6 +186,11 @@ async def job_daily_report():
             "roi": analytics.roi,
             "total_staked": analytics.total_staked,
         })
+        
+        # Measurement-First Reports
+        from scripts.generate_research_reports import generate_clv_report, generate_lag_report
+        generate_clv_report()
+        generate_lag_report()
     except Exception as e:
         logger.error(f"[Scheduler] Daily report error: {e}")
 
@@ -445,6 +450,20 @@ def start_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
         misfire_grace_time=300,
     )
+
+    # Lag analysis every hour
+    scheduler.add_job(
+        job_lag_analysis,
+        trigger=IntervalTrigger(hours=1),
+        id="lag_analysis",
+        name="Market lag detection",
+        replace_existing=True,
+    )
+
+async def job_lag_analysis():
+    """Analyze lags between sharp and local bookies."""
+    from automation.lag_detector import analyze_all_recent_matches
+    await analyze_all_recent_matches()
 
     # Daily report at 23:00 UTC
     scheduler.add_job(

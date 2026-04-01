@@ -1,21 +1,8 @@
-"""
-scripts/backtest.py
-Comprehensive backtesting harness for the AI Betting Intelligence System.
-Calculates calibration metrics (Brier Score, Log Loss) and plots calibration curves
-for the probabilistic model across historical matches in the database.
-
-CRITICAL ARCHITECTURAL NOTES:
-1. Point-in-Time Reality: This script attempts to recreate strengths chronologically. 
-   True backtesting requires a full chronological ELO/xG replay from the start of the dataset.
-2. Baselines: Brier scores mean nothing in a vacuum. This harness compares the model's
-   Brier score against the Bookmaker's closing implied probability baseline.
-3. Walk-forward Validation: Currently evaluates all settled matches. For robust variance 
-   testing, adapt this to test season-by-season (e.g., train on N, test on N+1).
-"""
-
 import sys
 import os
 from pathlib import Path
+import json
+from collections import defaultdict
 
 # Add the root directory to sys.path so we can import backend/models 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -23,21 +10,34 @@ sys.path.append(str(Path(__file__).parent.parent))
 import asyncio
 from typing import List, Tuple, Dict
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 from sklearn.metrics import brier_score_loss, log_loss
 import numpy as np
 
 from backend.database import AsyncSessionLocal
-from backend.models import Match, TeamMatchStats, OddsHistory
+from backend.models import Match, TeamMatchStats, OddsHistory, League
 from models.prob_model import ensemble_predict
 from models.value_model import remove_vig
 
-async def fetch_historical_strength(db, team_id: int, up_to_date) -> tuple[float, float, float]:
+async def fetch_historical_strength(db, team_id: int, up_to_date) -> tuple[float, float, float, int]:
     """
     Calculate point-in-time strengths for a team to prevent data leakage.
-    NOTE: A true production backtester would use a memory-state EloTracker 
-    iterating chronologically, rather than querying backward for every match.
+    Returns (attack_strength, defence_strength, elo, match_count).
     """
+    # Get TOTAL count of historical matches for this team before the date
+    count_stmt = (
+        select(func.count(TeamMatchStats.id))
+        .join(Match, Match.id == TeamMatchStats.match_id)
+        .where(
+            TeamMatchStats.team_id == team_id,
+            Match.match_date < up_to_date
+        )
+    )
+    count_res = await db.execute(count_stmt)
+    total_count = count_res.scalar() or 0
+
+    # Get last 10 for strengths calculation
     stmt = (
         select(TeamMatchStats)
         .join(Match, Match.id == TeamMatchStats.match_id)
@@ -52,7 +52,7 @@ async def fetch_historical_strength(db, team_id: int, up_to_date) -> tuple[float
     rows = result.scalars().all()
     
     if not rows:
-        return 1.35, 1.35, 1500.0 # Default fallback
+        return 1.35, 1.35, 1500.0, 0
         
     weights = [1.0 - (i * 0.05) for i in range(len(rows))]
     total_w = sum(weights)
@@ -65,7 +65,7 @@ async def fetch_historical_strength(db, team_id: int, up_to_date) -> tuple[float
         if r.goals_for > r.goals_against: points += 20
         elif r.goals_for < r.goals_against: points -= 20
     
-    return att / 1.35, dfc / 1.35, points
+    return att / 1.35, dfc / 1.35, points, total_count
 
 async def get_bookie_baseline(db, match_id: int) -> tuple[float, float, float]:
     """
@@ -90,8 +90,7 @@ async def get_bookie_baseline(db, match_id: int) -> tuple[float, float, float]:
 
 def print_reliability_diagram(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10, label: str = "Home Win"):
     """
-    Prints a text-based reliability diagram (calibration curve) to observe 
-    directional bias (over/underconfidence).
+    Prints a text-based reliability diagram (calibration curve).
     """
     bins = np.linspace(0.0, 1.0, n_bins + 1)
     indices = np.digitize(y_prob, bins) - 1
@@ -114,15 +113,22 @@ def print_reliability_diagram(y_true: np.ndarray, y_prob: np.ndarray, n_bins: in
         logger.info(f"{bins[i]:.2f} - {bins[i+1]:.2f} | {count:<6} | {pred_avg:.3f}      | {actual_freq:.3f}        | {bias:+.3f} ({bias_str})")
 
 async def run_backtest():
-    """Run historical backtest to validate model calibration vs bookmaker baseline."""
-    logger.info("Starting Monte Carlo Backtesting Harness...")
+    """Run historical backtest with live parity enforcement."""
+    logger.info("Starting Measurement-First Backtesting Harness...")
+    
+    stats = {
+        "total_processed": 0,
+        "total_skipped": 0,
+        "total_predictions": 0,
+        "league_breakdown": defaultdict(lambda: {"processed": 0, "skipped": 0, "predicted": 0})
+    }
     
     predictions = []
     actuals = []
     baselines = []
     
     async with AsyncSessionLocal() as db:
-        stmt = select(Match).where(
+        stmt = select(Match).options(joinedload(Match.league)).where(
             Match.status == "finished", 
             Match.home_score != None, 
             Match.away_score != None
@@ -131,50 +137,77 @@ async def run_backtest():
         matches = result.scalars().all()
         
         if not matches:
-            logger.warning("No settled matches found in the database. Run fetch tasks to populate history.")
+            logger.warning("No settled matches found in the database.")
             return
 
-        logger.info(f"Evaluating {len(matches)} historical matches for Brier Score calibration...")
+        logger.info(f"Analyzing {len(matches)} historical matches...")
         
         for match in matches:
+            stats["total_processed"] += 1
+            league_name = match.league.name if match.league else "Unknown"
+            stats["league_breakdown"][league_name]["processed"] += 1
+            
             # 1. Point-in-time reconstruction
-            h_att, h_def, h_elo = await fetch_historical_strength(db, match.home_team_id, match.match_date)
-            a_att, a_def, a_elo = await fetch_historical_strength(db, match.away_team_id, match.match_date)
+            h_att, h_def, h_elo, h_count = await fetch_historical_strength(db, match.home_team_id, match.match_date)
+            a_att, a_def, a_elo, a_count = await fetch_historical_strength(db, match.away_team_id, match.match_date)
             
-            # 2. Extract baseline bookmaker probabilities
-            b_h, b_d, b_a = await get_bookie_baseline(db, match.id)
-            baselines.append([b_h, b_d, b_a])
-            
-            # 3. Predict via Model
+            # 2. Enforce sufficiency parity
+            # Live logic: home_match_count >= 10 and away_match_count >= 10
             pred = ensemble_predict(
                 home_elo=h_elo, away_elo=a_elo,
                 home_attack=h_att, home_defence=h_def,
                 away_attack=a_att, away_defence=a_def,
-                home_match_count=15, # Hardcoding >10 to bypass sufficiency check during loop
-                away_match_count=15, 
+                home_match_count=h_count,
+                away_match_count=a_count, 
                 weather_str=match.weather or "",
             )
             
+            if not pred.get("is_sufficient"):
+                stats["total_skipped"] += 1
+                stats["league_breakdown"][league_name]["skipped"] += 1
+                logger.debug(f"Skipping match_id={match.id} ({league_name}): insufficient_data (H={h_count}, A={a_count})")
+                continue
+
+            stats["total_predictions"] += 1
+            stats["league_breakdown"][league_name]["predicted"] += 1
+            
+            # 3. Extract baseline bookmaker probabilities
+            b_h, b_d, b_a = await get_bookie_baseline(db, match.id)
+            baselines.append([b_h, b_d, b_a])
+            
             # 4. Code Actual Outcome
             if match.home_score > match.away_score:
-                actual = [1, 0, 0] # Home Win
+                actual = [1, 0, 0]
             elif match.home_score == match.away_score:
-                actual = [0, 1, 0] # Draw
+                actual = [0, 1, 0]
             else:
-                actual = [0, 0, 1] # Away Win
+                actual = [0, 0, 1]
                 
             predictions.append([pred["home"], pred["draw"], pred["away"]])
             actuals.append(actual)
             
+    # Output Summary Report
+    logger.info("==================================================")
+    logger.info("      BACKTEST EXECUTION SUMMARY")
+    logger.info("==================================================")
+    logger.info(f"Total Matches Processed: {stats['total_processed']}")
+    logger.info(f"Total Predictions Made:  {stats['total_predictions']}")
+    logger.info(f"Total Skipped:           {stats['total_skipped']} ({stats['total_skipped']/stats['total_processed']*100:.1f}%)")
+    logger.info("--------------------------------------------------")
+    logger.info(f"{'League':<25} | {'Proc':<5} | {'Pred':<5} | {'Skip':<5}")
+    for league, lstats in stats["league_breakdown"].items():
+        logger.info(f"{league[:25]:<25} | {lstats['processed']:<5} | {lstats['predicted']:<5} | {lstats['skipped']:<5}")
+    logger.info("==================================================")
+
     if not predictions:
-        logger.warning("No valid predictions generated.")
+        logger.warning("No predictions met sufficiency criteria. Measurement aborted.")
         return
         
     y_true = np.array(actuals)
     y_prob = np.array(predictions)
     y_base = np.array(baselines)
     
-    # 5. Compute Comparative Brier Scores
+    # Compute Comparative Metrics
     brier_m_home = brier_score_loss(y_true[:, 0], y_prob[:, 0])
     brier_m_draw = brier_score_loss(y_true[:, 1], y_prob[:, 1])
     brier_m_away = brier_score_loss(y_true[:, 2], y_prob[:, 2])
@@ -191,28 +224,17 @@ async def run_backtest():
     value_add = brier_base_avg - brier_model_avg
     
     logger.info("==================================================")
-    logger.info(f"      BACKTEST CALIBRATION RESULTS (N={len(matches)})")
+    logger.info(f"      CALIBRATION RESULTS (N={len(predictions)})")
     logger.info("==================================================")
-    logger.info("METRIC                 | MODEL    | BASELINE ")
-    logger.info("--------------------------------------------------")
-    logger.info(f"Brier (Home)           | {brier_m_home:.4f}   | {brier_b_home:.4f}")
-    logger.info(f"Brier (Draw)           | {brier_m_draw:.4f}   | {brier_b_draw:.4f}")
-    logger.info(f"Brier (Away)           | {brier_m_away:.4f}   | {brier_b_away:.4f}")
-    logger.info(f"Brier (Overall Avg)    | {brier_model_avg:.4f}   | {brier_base_avg:.4f}")
-    logger.info(f"Log Loss               | {ll_model:.4f}   | {ll_base:.4f}")
+    logger.info(f"Model Brier Avg:    {brier_model_avg:.4f}")
+    logger.info(f"Baseline Brier Avg: {brier_base_avg:.4f}")
+    logger.info(f"Value Add:          {value_add:+.4f}")
+    logger.info(f"Model Log Loss:     {ll_model:.4f}")
     logger.info("==================================================")
     
-    if value_add > 0.005:
-        logger.success(f"Verdict: EXCELLENT. Model outperforms bookie baseline by {value_add:.4f} Brier points.")
-    elif value_add > -0.002:
-        logger.info(f"Verdict: COMPETITIVE. Model is closely calibrated with the baseline ({value_add:+.4f} diff).")
-    else:
-        logger.warning(f"Verdict: POOR. Model underperforms the implied odds baseline by {abs(value_add):.4f} Brier. Do not bet.")
-        
-    logger.info("\n")
     print_reliability_diagram(y_true[:, 0], y_prob[:, 0], label="Home Win")
-    logger.info("\n")
     print_reliability_diagram(y_true[:, 1], y_prob[:, 1], label="Draw")
 
 if __name__ == "__main__":
     asyncio.run(run_backtest())
+

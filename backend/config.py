@@ -68,11 +68,10 @@ class Settings(BaseSettings):
     odds_line_move_alert: float = 0.10
     default_vig_margin: float = 0.05
 
-    # ─── Tier Limits ────────────────────────────────────────────────────────
-    free_daily_limit: int = 1
-    starter_daily_limit: int = 5
-    pro_daily_limit: int = 20
-    bot_admin_telegram_id: str = ""
+    # ─── Measurement-First Platform ──────────────────────────────────────────
+    observation_mode: bool = True
+    clv_log_path: str = "logs/clv_observations.jsonl"
+    lag_log_path: str = "logs/lag_analysis.jsonl"
 
 
 @lru_cache

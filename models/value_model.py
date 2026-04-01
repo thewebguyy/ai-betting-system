@@ -255,6 +255,18 @@ def detect_value_from_odds(
     return value_bets, (model_h, model_d, model_a)
 
 
+def log_clv_observation(data: dict):
+    """Log CLV observation to JSONL file."""
+    from backend.config import get_settings
+    import json
+    import os
+    settings = get_settings()
+    log_file = settings.clv_log_path
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    with open(log_file, "a") as f:
+        f.write(json.dumps(data) + "\n")
+
+
 
 async def detect_value_bets_for_upcoming():
     """
@@ -275,12 +287,13 @@ async def detect_value_bets_for_upcoming():
         br = br_result.scalar_one_or_none()
         bankroll = br.balance if br else settings.default_bankroll
 
-        # Check Drawdown Protection
-        from backend.models import SystemConfig
-        cfg_paused = await db.execute(select(SystemConfig).where(SystemConfig.key == "betting_paused"))
-        if (paused_obj := cfg_paused.scalar_one_or_none()) and paused_obj.value == "True":
-            logger.warning("[Scanner] Betting is PAUSED due to drawdown protection.")
-            return 0
+        if settings.observation_mode:
+            logger.info("[Scanner] OBSERVATION MODE ACTIVE: Real betting and Telegram alerts disabled.")
+        else:
+            cfg_paused = await db.execute(select(SystemConfig).where(SystemConfig.key == "betting_paused"))
+            if (paused_obj := cfg_paused.scalar_one_or_none()) and paused_obj.value == "True":
+                logger.warning("[Scanner] Betting is PAUSED due to drawdown protection.")
+                return 0
             
         cfg_kelly = await db.execute(select(SystemConfig).where(SystemConfig.key == "kelly_fraction_multiplier"))
         kelly_mult = float(cfg_kelly.scalar_one_or_none().value) if cfg_kelly.scalar_one_or_none() else 1.0
@@ -354,10 +367,33 @@ async def detect_value_bets_for_upcoming():
                 # Filter VBs to only include the one where this BM is the best
                 for vb in vbs:
                     if vb["selection"] == selection:
-                        row = ValueBet(**vb)
-                        db.add(row)
+                        if settings.observation_mode:
+                            # Observation Log Entry
+                            obs_data = {
+                                "match_id": match.id,
+                                "league": match.league.name if match.league else "Unknown",
+                                "kickoff_time": match.match_date.isoformat(),
+                                "selection": selection,
+                                "predicted_probability": vb["model_prob"],
+                                "model_odds": round(1 / vb["model_prob"], 3) if vb["model_prob"] > 0 else 0,
+                                "bookmaker_odds_at_prediction": vb["decimal_odds"],
+                                "timestamp_prediction": datetime.utcnow().isoformat(),
+                                "timestamp_odds_capture": datetime.utcnow().isoformat(), # Placeholder
+                                "implied_probability_market": vb["implied_prob"],
+                                "implied_probability_model": vb["model_prob"],
+                                "closing_odds": None,
+                                "closing_source": None,
+                                "CLV_delta_odds": None,
+                                "CLV_delta_prob": None
+                            }
+                            log_clv_observation(obs_data)
+                            logger.info(f"[OBSERVATION] Recorded potential edge for {match.id}: {selection} @ {price}")
+                        else:
+                            row = ValueBet(**vb)
+                            db.add(row)
+                            logger.info(f"Value found: {selection} @ {price} on {bm} (EV={vb['ev']:.3f})")
+                        
                         detected_count += 1
-                        logger.info(f"Value found: {selection} @ {price} on {bm} (EV={vb['ev']:.3f})")
 
                 # Cache probabilities (only once per match)
                 match.model_home_prob = mh
@@ -368,10 +404,10 @@ async def detect_value_bets_for_upcoming():
 
         await db.commit()
 
-    logger.info(f"Value bet scan complete. Found {detected_count} value bets.")
+    logger.info(f"Value bet scan complete. Found {detected_count} potential value bets.")
 
-    # Fire Telegram/WS alerts (non-blocking)
-    if detected_count > 0:
+    # Fire Telegram/WS alerts (non-blocking) - DISABLED in observation mode
+    if detected_count > 0 and not settings.observation_mode:
         try:
             from automation.notifications import send_telegram_message
             await send_telegram_message(f"🎯 {detected_count} new value bets detected! Check the dashboard.")

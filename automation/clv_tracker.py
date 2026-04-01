@@ -104,3 +104,74 @@ async def track_closing_odds():
                 logger.error(f"Error fetching closing odds for Match {match.id}: {e}")
         
         await db.commit()
+    
+    # NEW: Settle observations in JSONL
+    await settle_jsonl_observations()
+
+async def settle_jsonl_observations():
+    """
+    Read observations from JSONL, fetch closing odds, and update the file.
+    """
+    from backend.config import get_settings
+    import json
+    import os
+    settings = get_settings()
+    log_file = settings.clv_log_path
+    
+    if not os.path.exists(log_file):
+        return
+        
+    updated_rows = []
+    with open(log_file, "r") as f:
+        for line in f:
+            if not line.strip(): continue
+            data = json.loads(line)
+            
+            # If closing_odds is null and match kickoff has passed
+            kickoff = datetime.fromisoformat(data["kickoff_time"])
+            if data.get("closing_odds") is None and datetime.utcnow() > kickoff:
+                # Fetch closing odds for this match
+                try:
+                    # Attempt to find closing odds in db (OddsHistory) near kickoff
+                    async with AsyncSessionLocal() as db:
+                        stmt = (
+                            select(OddsHistory)
+                            .where(
+                                OddsHistory.match_id == data["match_id"],
+                                OddsHistory.fetched_at >= kickoff - timedelta(minutes=60),
+                                OddsHistory.fetched_at <= kickoff + timedelta(minutes=15)
+                            )
+                            .order_by(OddsHistory.fetched_at.desc())
+                        )
+                        result = await db.execute(stmt)
+                        odds_list = result.scalars().all()
+                        
+                        if odds_list:
+                            pinnacle_odds = next((o for o in odds_list if o.bookmaker == "pinnacle"), None)
+                            target_odds = pinnacle_odds if pinnacle_odds else odds_list[0]
+                            
+                            closing_val = None
+                            selection = data["selection"]
+                            if selection == "Home": closing_val = target_odds.home_odds
+                            elif selection == "Draw": closing_val = target_odds.draw_odds
+                            elif selection == "Away": closing_val = target_odds.away_odds
+                            
+                            if closing_val:
+                                data["closing_odds"] = round(closing_val, 3)
+                                data["closing_source"] = "pinnacle" if target_odds.bookmaker == "pinnacle" else "market_average"
+                                data["CLV_delta_odds"] = round(closing_val - data["bookmaker_odds_at_prediction"], 3)
+                                # CLV prob delta: implied_prob_model - implied_prob_market(closing)
+                                # Actually the prompt says CLV_delta_prob = implied_prob_model - implied_prob_market
+                                # But market implied at closing is 1/closing_odds
+                                if closing_val > 0:
+                                    data["CLV_delta_prob"] = round(data["implied_probability_model"] - (1/closing_val), 4)
+                                    logger.info(f"Settled observation for {data['match_id']}: CLV={data['CLV_delta_odds']:+.3f}")
+                except Exception as e:
+                    logger.error(f"Error settling observation for {data['match_id']}: {e}")
+            
+            updated_rows.append(data)
+            
+    # Rewrite JSONL with updated rows
+    with open(log_file, "w") as f:
+        for row in updated_rows:
+            f.write(json.dumps(row) + "\n")
