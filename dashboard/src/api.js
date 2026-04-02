@@ -20,26 +20,7 @@ const api = axios.create({
 
 
 
-// Attach JWT token to every request
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-// Handle auth errors globally
-api.interceptors.response.use(
-    (res) => res,
-    (err) => {
-        if (err.response?.status === 401) {
-            localStorage.removeItem('access_token');
-            window.location.href = '/login';
-        }
-        return Promise.reject(err);
-    }
-);
+// Authentication removed since this is a local single-user instance
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const login = async (username, password) => {

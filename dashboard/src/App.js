@@ -1,7 +1,5 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './AuthContext';
-import LoginPage from './LoginPage';
 import Sidebar from './Sidebar';
 import Dashboard from './pages/Dashboard';
 import ValueBets from './pages/ValueBets';
@@ -12,12 +10,6 @@ import Reports from './pages/Reports';
 import EVCalculator from './pages/EVCalculator';
 
 function ProtectedLayout() {
-    const { isAuthenticated } = useAuth();
-
-    if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
-    }
-
     return (
         <div className="app-layout">
             <Sidebar />
@@ -39,13 +31,10 @@ function ProtectedLayout() {
 
 export default function App() {
     return (
-        <AuthProvider>
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/*" element={<ProtectedLayout />} />
-                </Routes>
-            </BrowserRouter>
-        </AuthProvider>
+        <BrowserRouter>
+            <Routes>
+                <Route path="/*" element={<ProtectedLayout />} />
+            </Routes>
+        </BrowserRouter>
     );
 }

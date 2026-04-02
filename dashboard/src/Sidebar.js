@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useAuth } from './AuthContext';
 
 const navItems = [
     { to: '/', icon: '🏠', label: 'Dashboard' },
@@ -13,8 +12,6 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-    const { logout } = useAuth();
-
     return (
         <aside style={{
             position: 'fixed',
@@ -73,16 +70,8 @@ export default function Sidebar() {
                 ))}
             </nav>
 
-            {/* Footer / logout */}
+            {/* Footer */}
             <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid var(--border)' }}>
-                <button
-                    onClick={logout}
-                    className="btn btn-secondary"
-                    style={{ width: '100%', justifyContent: 'center', fontSize: '0.8rem' }}
-                    id="sidebar-logout"
-                >
-                    🚪 Sign Out
-                </button>
                 <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.75rem' }}>
                     For personal use only
                 </p>

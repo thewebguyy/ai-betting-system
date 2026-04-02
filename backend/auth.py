@@ -41,12 +41,9 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
-async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> str:
+async def get_current_user() -> str:
     # Personal bypass: skip token validation and return admin user directly.
-    if settings.app_env == "development":
-         from loguru import logger
-         logger.debug("Authentication bypassed for personal use.")
-    return settings.admin_username
+    return "admin"
 
 
 
