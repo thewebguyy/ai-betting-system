@@ -65,6 +65,7 @@ export const getLineMovement = (matchId, bookmaker) =>
 
 // ── Matches ───────────────────────────────────────────────────────────────
 export const getMatches = (params = {}) => api.get('/matches', { params }).then(r => r.data);
+export const getTodayPredictions = () => api.get('/api/today_predictions').then(r => r.data);
 
 // ── Reports ───────────────────────────────────────────────────────────────
 export const getReports = () => api.get('/reports').then(r => r.data);

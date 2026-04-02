@@ -414,6 +414,138 @@ async def generate_report(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ─── PredictZ-Style Dashboard (Phase 6) ───────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.get("/api/today_predictions", tags=["Predictions"])
+async def get_today_predictions(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    _user: str = Depends(get_current_user),
+):
+    from backend.cache import cache_get, cache_set
+    from datetime import datetime, time
+    import json
+    import os
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+    from backend.models import Match, OddsHistory, Bankroll
+    from models.prob_model import ensemble_predict
+    from models.value_model import remove_vig, expected_value, kelly_criterion
+    
+    cache_key = "today_predictions_dashboard"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    now = datetime.utcnow()
+    # Matches scheduled from start of today to end of tomorrow to capture near future
+    start_time = datetime.combine(now.date(), time.min)
+    end_time = datetime.combine(now.date(), time.max)
+    
+    stmt = select(Match).options(joinedload(Match.home_team), joinedload(Match.away_team)).where(
+        Match.status == "scheduled",
+        Match.match_date >= start_time,
+        Match.match_date <= end_time
+    ).order_by(Match.match_date.asc())
+    res = await db.execute(stmt)
+    matches = res.scalars().all()
+    
+    br_result = await db.execute(select(Bankroll).order_by(Bankroll.snapshot_at.desc()).limit(1))
+    br = br_result.scalar_one_or_none()
+    bankroll = br.balance if br else 1000.0
+    
+    predictions = []
+    
+    for match in matches:
+        odds_res = await db.execute(
+            select(OddsHistory).where(OddsHistory.match_id == match.id).order_by(OddsHistory.fetched_at.desc()).limit(5)
+        )
+        latest_odds = odds_res.scalars().all()
+        home_odds, draw_odds, away_odds = 0.0, 0.0, 0.0
+        bookie = "None"
+        for o in latest_odds:
+            if o.home_odds and o.home_odds > 1:
+                home_odds, draw_odds, away_odds = o.home_odds, o.draw_odds, o.away_odds
+                bookie = o.bookmaker
+                break
+             
+        home_attack = match.home_team.attack_strength if match.home_team else 1.0
+        home_defence = match.home_team.defence_strength if match.home_team else 1.0
+        away_attack = match.away_team.attack_strength if match.away_team else 1.0
+        away_defence = match.away_team.defence_strength if match.away_team else 1.0
+        home_elo = match.home_team.elo_rating if match.home_team else 1500.0
+        away_elo = match.away_team.elo_rating if match.away_team else 1500.0
+        
+        pred = ensemble_predict(
+             home_elo=home_elo, away_elo=away_elo,
+             home_attack=home_attack, home_defence=home_defence,
+             away_attack=away_attack, away_defence=away_defence,
+             home_match_count=10, away_match_count=10, weather_str=match.weather or ""
+        )
+        
+        model_h = pred["home"]
+        model_d = pred["draw"]
+        model_a = pred["away"]
+        
+        vig = remove_vig(home_odds, draw_odds, away_odds) if home_odds and home_odds > 1 else {"home":0, "draw":0, "away":0}
+        
+        selections = [
+            {"label": "Home", "odds": home_odds, "prob": model_h, "true_ip": vig["home"]},
+            {"label": "Draw", "odds": draw_odds, "prob": model_d, "true_ip": vig["draw"]},
+            {"label": "Away", "odds": away_odds, "prob": model_a, "true_ip": vig["away"]}
+        ]
+        
+        best_val = None
+        for s in selections:
+            if s["odds"] and s["odds"] > 1:
+                ev = expected_value(s["prob"], s["odds"])
+                kf = kelly_criterion(s["prob"], s["odds"])
+                stake = round(bankroll * (kf * 0.1), 2) # Default fractional kelly 0.1
+                if not best_val or ev > best_val.get("ev", -99):
+                    best_val = {
+                        "selection": s["label"],
+                        "odds": s["odds"],
+                        "prob": round(s["prob"], 4),
+                        "ev": round(ev, 4),
+                        "kelly_fraction": round(kf * 0.1, 4),
+                        "suggested_stake": stake
+                    }
+        
+        if not best_val:
+            best_val = {"selection": "None", "odds": 0, "prob": 0, "ev": 0, "kelly_fraction": 0, "suggested_stake": 0}
+
+        predictions.append({
+            "match_id": match.id,
+            "home_team": match.home_team.name if match.home_team else "Unknown",
+            "away_team": match.away_team.name if match.away_team else "Unknown",
+            "kickoff": match.match_date.isoformat(),
+            "probs": {"home": round(model_h, 4), "draw": round(model_d, 4), "away": round(model_a, 4)},
+            "best_value": best_val,
+            "bookmaker": bookie,
+            "is_value_bet": best_val.get("ev", 0) > 0.05
+        })
+        
+    os.makedirs("logs", exist_ok=True)
+    with open("logs/dashboard_snapshots.jsonl", "a") as f:
+         f.write(json.dumps({"timestamp": now.isoformat(), "predictions": predictions}) + "\n")
+         
+    os.makedirs("reports", exist_ok=True)
+    with open("reports/today_predictions.md", "w") as f:
+         f.write(f"# Today's Predictions - {now.strftime('%Y-%m-%d')}\n\n")
+         if not predictions:
+             f.write("No predictions available for today.\n")
+         for p in predictions:
+             f.write(f"## {p['home_team']} vs {p['away_team']}\n")
+             f.write(f"- **Kickoff:** {p['kickoff']}\n")
+             f.write(f"- **Probs:** Home ({p['probs']['home']:.2f}) | Draw ({p['probs']['draw']:.2f}) | Away ({p['probs']['away']:.2f})\n")
+             f.write(f"- **Best Value:** {p['best_value']['selection']} @ {p['best_value']['odds']} (EV: {p['best_value']['ev']:.2f})\n")
+             f.write(f"- **Suggested Stake:** {p['best_value']['suggested_stake']}\n\n")
+             
+    await cache_set(cache_key, predictions, ttl=600)  
+    return predictions
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ─── Users (Phase 5) ──────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/users", response_model=List[UserOut], tags=["Users"])
