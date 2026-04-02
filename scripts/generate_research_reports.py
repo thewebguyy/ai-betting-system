@@ -133,6 +133,84 @@ Generated: {datetime.utcnow().isoformat()}
         f.write(md)
     logger.info(f"Lag report generated: {report_file}")
 
+def generate_edge_hypotheses_report():
+    """Step 3: Generate the statistical edge hypotheses report"""
+    try:
+        from scripts.pseudo_execution import run_pseudo_execution_workflow
+        hypotheses = run_pseudo_execution_workflow()
+    except Exception as e:
+        logger.error(f"Error running pseudo_execution: {e}")
+        return
+
+    report_file = "reports/ranked_edge_hypotheses.md"
+    os.makedirs(os.path.dirname(report_file), exist_ok=True)
+    
+    md = f"# 🧪 Ranked Market Edge Hypotheses\n"
+    md += f"Generated: {datetime.utcnow().isoformat()}\n\n"
+    
+    if not hypotheses:
+        md += "No actionable hypotheses discovered yet. Continue collecting lag and CLV data.\n"
+        with open(report_file, "w", encoding="utf-8") as f:
+            f.write(md)
+        return
+        
+    def calculate_score(h):
+        sample = h.get('sample_size', 0)
+        mean_clv = h.get('mean_clv', 0.0)
+        p_val = h.get('p_value', 1.0)
+        
+        if sample < 2 or mean_clv <= 0:
+            return 0.0
+            
+        # Score combining effect size, confidence and sample sizing
+        confidence_factor = max(0, (0.05 - p_val) / 0.05) if p_val < 0.05 else 0
+        effect_factor = mean_clv * 100 # percentage points
+        sample_factor = np.log10(max(10, sample)) # log scaling for stability
+        
+        if p_val > 0.05:
+            # penalize if not significant, but keep score proportional to what it showed
+            return (mean_clv * 10) * np.log10(max(2, sample)) / (p_val + 1)
+            
+        return effect_factor * confidence_factor * sample_factor
+
+    # Sort hypotheses by score descending
+    hypotheses.sort(key=calculate_score, reverse=True)
+        
+    for index, hyp in enumerate(hypotheses, 1):
+        score = calculate_score(hyp)
+        md += f"## {index}. {hyp['id']}: {hyp['description']}\n"
+        md += f"- **Target Bookmaker:** {hyp['bookmaker']} (Avg Lag: {hyp.get('avg_lag_seconds', 0.0):.1f}s, Events: {hyp.get('frequency', 0)})\n"
+        md += f"- **Sample Size (Pseudo-Bets):** {hyp.get('sample_size', 0)}\n"
+        
+        if hyp.get('sample_size', 0) > 0:
+            mean_clv = hyp['mean_clv']
+            std_clv = hyp['std_clv']
+            p_val = hyp['p_value']
+            
+            ci_lower = mean_clv - 1.96 * (std_clv / np.sqrt(hyp['sample_size'])) if hyp['sample_size'] > 1 else mean_clv
+            ci_upper = mean_clv + 1.96 * (std_clv / np.sqrt(hyp['sample_size'])) if hyp['sample_size'] > 1 else mean_clv
+            
+            md += f"- **Mean CLV:** {mean_clv:+.4f} (95% CI: [{ci_lower:+.4f}, {ci_upper:+.4f}])\n"
+            md += f"- **Standard Deviation:** {std_clv:.4f}\n"
+            md += f"- **P-Value:** {p_val:.4f}\n"
+            md += f"- **Edge Confidence Score:** {score:.2f}\n"
+            
+            if p_val < 0.05 and mean_clv > 0.02 and hyp['sample_size'] >= 30:
+                recommendation = "🟢 **Worthy of live testing** (Significant positive edge and stable sample)"
+            elif p_val < 0.05 and mean_clv > 0.01:
+                recommendation = "🟡 **Collect more data** (Significant but small edge or small sample size)"
+            else:
+                recommendation = "🔴 **Discard** (Edge not statistically solid or negative)"
+                
+            md += f"- **Recommendation:** {recommendation}\n\n"
+        else:
+            md += f"- *No pseudo-bets simulated due to missing CLV observations for this market.*\n\n"
+            
+    with open(report_file, "w", encoding="utf-8") as f:
+        f.write(md)
+    logger.info(f"Ranked edge hypotheses report generated: {report_file}")
+
 if __name__ == "__main__":
     generate_clv_report()
     generate_lag_report()
+    generate_edge_hypotheses_report()

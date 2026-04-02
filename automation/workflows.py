@@ -188,9 +188,10 @@ async def job_daily_report():
         })
         
         # Measurement-First Reports
-        from scripts.generate_research_reports import generate_clv_report, generate_lag_report
+        from scripts.generate_research_reports import generate_clv_report, generate_lag_report, generate_edge_hypotheses_report
         generate_clv_report()
         generate_lag_report()
+        generate_edge_hypotheses_report()
     except Exception as e:
         logger.error(f"[Scheduler] Daily report error: {e}")
 
@@ -459,11 +460,47 @@ def start_scheduler() -> AsyncIOScheduler:
         name="Market lag detection",
         replace_existing=True,
     )
+    
+    # Hourly hypothesis auto-generation and pseudo-execution
+    scheduler.add_job(
+        job_hourly_hypothesis_update,
+        trigger=IntervalTrigger(hours=1),
+        id="hourly_hypothesis_update_job",
+        name="Hourly Hypothesis Update",
+        replace_existing=True,
+    )
+    
+    # Daily edge summary compiling ranked hypotheses
+    scheduler.add_job(
+        job_daily_edge_summary,
+        trigger=CronTrigger(hour=23, minute=30, timezone=utc),
+        id="daily_edge_summary_job",
+        name="Daily Edge Summary",
+        replace_existing=True,
+    )
 
 async def job_lag_analysis():
     """Analyze lags between sharp and local bookies."""
     from automation.lag_detector import analyze_all_recent_matches
     await analyze_all_recent_matches()
+
+async def job_hourly_hypothesis_update():
+    """Hourly check for new hypotheses and pseudo-execution simulation."""
+    logger.info("[Scheduler] Running hourly hypothesis update...")
+    try:
+        from scripts.pseudo_execution import run_pseudo_execution_workflow
+        run_pseudo_execution_workflow()
+    except Exception as e:
+        logger.error(f"[Scheduler] Hypothesis update error: {e}")
+
+async def job_daily_edge_summary():
+    """Daily compilation of ranked hypotheses and historical trends."""
+    logger.info("[Scheduler] Generating daily edge summary report...")
+    try:
+        from scripts.generate_research_reports import generate_edge_hypotheses_report
+        generate_edge_hypotheses_report()
+    except Exception as e:
+        logger.error(f"[Scheduler] Daily edge summary error: {e}")
 
     # Daily report at 23:00 UTC
     scheduler.add_job(
