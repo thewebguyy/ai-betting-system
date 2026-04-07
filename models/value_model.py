@@ -22,7 +22,7 @@ from sqlalchemy.orm import joinedload
 
 from backend.config import get_settings
 from backend.database import AsyncSessionLocal
-from backend.models import Match, OddsHistory, ValueBet, Bankroll
+from backend.models import Match, OddsHistory, ValueBet, Bankroll, SystemConfig
 from models.prob_model import get_predictor, build_features, ensemble_predict
 
 settings = get_settings()
@@ -156,8 +156,8 @@ def dynamic_kelly(ev: float, confidence: float, consecutive_losses: int, market:
     if market == "correct_score":
         f *= 0.4  # Correct score is high variance, reduce stake further
         
-    # Final adjustment using the passed multiplier
-    f *= (1 + multiplier)
+    # Final adjustment using the passed multiplier (e.g. 0.1 for 1/10th Kelly)
+    f *= multiplier
     
     return round(f, 4)
 

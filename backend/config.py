@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # ─── Telegram ─────────────────────────────────────────────────────────────
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    bot_admin_telegram_id: str = ""
+
+    # ─── Tier Limits ──────────────────────────────────────────────────────────
+    free_daily_limit: int = 1
+    starter_daily_limit: int = 5
+    pro_daily_limit: int = 50
 
     # ─── SendGrid ─────────────────────────────────────────────────────────────
     sendgrid_api_key: str = ""

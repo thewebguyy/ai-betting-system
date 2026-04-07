@@ -19,6 +19,7 @@ from backend.config import get_settings
 from backend.database import AsyncSessionLocal
 from backend.models import OddsHistory, Match
 from backend.utils import is_same_team, jittered_sleep, jittered_goto
+from scrapers.data_fetch import fetch_odds_api
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 

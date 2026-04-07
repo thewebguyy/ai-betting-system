@@ -32,8 +32,11 @@ async def job_daily_scan():
         from sqlalchemy import select
         import json
 
-        # Fetch and store upcoming fixtures
-        raw_fixtures = await fetch_fixtures(league_id=39, season=2024)
+        # Top 5 European Leagues
+        LEAGUES = [39, 140, 135, 78, 61] # EPL, La Liga, Serie A, Bundesliga, Ligue 1
+        raw_fixtures = []
+        for lid in LEAGUES:
+             raw_fixtures += await fetch_fixtures(league_id=lid, season=2024)
         source = get_active_source()
         async with AsyncSessionLocal() as db:
             for fixture_data in raw_fixtures[:50]:
@@ -531,7 +534,21 @@ async def job_daily_edge_summary():
     except Exception as e:
         logger.error(f"[Scheduler] Daily edge summary error: {e}")
 
-    # Daily report at 23:00 UTC
+def start_scheduler() -> AsyncIOScheduler:
+    """Create, configure, and start the APScheduler instance."""
+    scheduler = AsyncIOScheduler(timezone=utc)
+
+    # 1. Daily Scan at 06:00 UTC
+    scheduler.add_job(
+        job_daily_scan,
+        trigger=CronTrigger(hour=6, minute=0, timezone=utc),
+        id="daily_scan",
+        name="Daily fixtures and value scan",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # 2. Daily Report at 23:00 UTC
     scheduler.add_job(
         job_daily_report,
         trigger=CronTrigger(hour=23, minute=0, timezone=utc),
@@ -539,6 +556,43 @@ async def job_daily_edge_summary():
         name="EOD report generation",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+
+    # 3. Daily Edge Summary at 23:30 UTC
+    scheduler.add_job(
+        job_daily_edge_summary,
+        trigger=CronTrigger(hour=23, minute=30, timezone=utc),
+        id="daily_edge_summary_job",
+        name="Daily Edge Summary",
+        replace_existing=True,
+    )
+
+    # 4. Hourly Line Movement monitor
+    scheduler.add_job(
+        job_hourly_odds_update,
+        trigger=IntervalTrigger(hours=1),
+        id="hourly_odds_update",
+        name="Hourly line movement monitor",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
+    # 5. Hourly Lag Analysis
+    scheduler.add_job(
+        job_lag_analysis,
+        trigger=IntervalTrigger(hours=1),
+        id="lag_analysis",
+        name="Market lag detection",
+        replace_existing=True,
+    )
+    
+    # 6. Hourly Prediction Feed Refresh
+    scheduler.add_job(
+        job_hourly_prediction_feed,
+        trigger=IntervalTrigger(hours=1),
+        id="hourly_prediction_feed_job",
+        name="Hourly Prediction Feed Refresh",
+        replace_existing=True,
     )
 
     scheduler.start()

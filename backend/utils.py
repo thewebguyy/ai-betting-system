@@ -68,3 +68,16 @@ def is_same_team(name1: str, name2: str) -> bool:
         return True
         
     return False
+
+async def jittered_sleep(min_s: float = 1.0, max_s: float = 3.0):
+    """Async sleep with random jitter to mimic human behavior."""
+    await asyncio.sleep(random.uniform(min_s, max_s))
+
+async def jittered_goto(page, url: str):
+    """page.goto with a random pre-sleep to thwart simple rate limits."""
+    await jittered_sleep(1.0, 2.5)
+    try:
+        return await page.goto(url, wait_until="networkidle", timeout=60000)
+    except Exception as e:
+        logger.warning(f"Jittered goto failed for {url}: {e}")
+        raise e
