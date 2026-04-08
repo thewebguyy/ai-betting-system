@@ -27,7 +27,7 @@ LEAGUES = [
     {"id": 78, "name": "Bundesliga"},
     {"id": 61, "name": "Ligue 1"},
 ]
-SEASON = 2024
+SEASON = 2025
 
 async def bootstrap():
     logger.info("🚀 Starting System Bootstrap...")
@@ -55,7 +55,8 @@ async def bootstrap():
             logger.info(f"Fetching historical results for {lname}...")
             # Note: The underlying fetch_fixtures might need a 'status' or 'from/to' param if supported by the scraper.
             # Assuming fetch_fixtures returns recent enough history or can be filtered.
-            hist_fixtures = await fetch_fixtures(league_id=lid, season=SEASON)
+            # Status 'FT' = Finished matches
+            hist_fixtures = await fetch_fixtures(league_id=lid, season=SEASON, status="FT")
             
             # We filter for 'FT' matches to use for xG
             processed_hist = 0
