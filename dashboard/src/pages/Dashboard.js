@@ -12,6 +12,8 @@ const MetricCard = React.memo(({ label, value, sub, color = 'neutral' }) => {
     );
 });
 
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton';
+
 export default function Dashboard() {
     const [analytics, setAnalytics] = useState(null);
     const [bankroll, setBankroll] = useState([]);
@@ -35,7 +37,8 @@ export default function Dashboard() {
             setBankroll([]);
             setPredictions([]);
         } finally {
-            setLoading(false);
+            // Add a slight delay to prevent flicker on fast loads
+            setTimeout(() => setLoading(false), 200);
         }
     }, []);
 
@@ -79,16 +82,29 @@ export default function Dashboard() {
 
     if (loading) {
         return (
-            <div className="loading-wrapper">
-                <div className="spinner" />
-                <span>Loading dashboard…</span>
+            <div className="fade-in">
+                <div className="page-header">
+                    <h1>Dashboard</h1>
+                    <p>AI-driven betting intelligence and edge detection</p>
+                </div>
+                <div className="grid-4 section">
+                    <CardSkeleton />
+                    <CardSkeleton />
+                    <CardSkeleton />
+                    <CardSkeleton />
+                </div>
+                <div className="section">
+                    <TableSkeleton rows={8} />
+                </div>
             </div>
         );
     }
 
+
     return (
-        <div>
+        <div className="fade-in">
             {/* Header */}
+
             <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div>
                     <h1>PredictZ Today's Predictions</h1>

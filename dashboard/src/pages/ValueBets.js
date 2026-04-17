@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { FixedSizeList } from 'react-window';
 import { getValueBets, triggerScan } from '../api';
+import { TableSkeleton } from '../components/Skeleton';
 
 const STATUS_BADGE = {
     pending: 'badge-yellow',
@@ -9,7 +11,7 @@ const STATUS_BADGE = {
     void: 'badge-purple',
 };
 
-import { FixedSizeList as List } from 'react-window';
+
 
 const ValueBetRow = React.memo(({ index, data, style }) => {
     const vb = data[index];
@@ -36,6 +38,9 @@ const ValueBetRow = React.memo(({ index, data, style }) => {
     );
 });
 
+
+
+
 export default function ValueBetsPage() {
     const [bets, setBets] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -56,7 +61,7 @@ export default function ValueBetsPage() {
                 setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
             }
         } finally {
-            setLoading(false);
+            setTimeout(() => setLoading(false), 200);
         }
     }, [minEv, filterStatus]);
 
@@ -72,8 +77,18 @@ export default function ValueBetsPage() {
         }
     }, [load]);
 
+    if (loading) return (
+        <div className="fade-in">
+            <div className="page-header">
+                <h1>Value Bets</h1>
+                <p>Opportunities where model probability exceeds implied odds</p>
+            </div>
+            <TableSkeleton rows={10} />
+        </div>
+    );
+
     return (
-        <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
+        <div className="fade-in" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
                 <div>
                     <h1>Value Bets</h1>
@@ -83,6 +98,7 @@ export default function ValueBetsPage() {
                     {scanning ? '⏳ Scanning…' : '🎯 Run Scan'}
                 </button>
             </div>
+
 
             {/* Filters */}
             <div className="card" style={{ marginBottom: '1.5rem', display: 'flex', gap: '1.5rem', alignItems: 'flex-end', flexShrink: 0 }}>
@@ -136,7 +152,7 @@ export default function ValueBetsPage() {
                     </div>
                     {/* Virtualized List */}
                     <div style={{ flex: 1 }}>
-                        <List
+                        <FixedSizeList
                             height={500}
                             itemCount={bets.length}
                             itemSize={60}
@@ -144,7 +160,8 @@ export default function ValueBetsPage() {
                             itemData={bets}
                         >
                             {ValueBetRow}
-                        </List>
+                        </FixedSizeList>
+
                     </div>
                 </div>
             )}

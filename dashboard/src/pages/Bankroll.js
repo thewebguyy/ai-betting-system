@@ -10,12 +10,15 @@ import toast from 'react-hot-toast';
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip, Legend);
 
 
+import { CardSkeleton, ChartSkeleton } from '../components/Skeleton';
+
 export default function BankrollPage() {
     const [snapshots, setSnapshots] = useState([]);
     const [bets, setBets] = useState([]);
     const [newBalance, setNewBalance] = useState('');
     const [note, setNote] = useState('');
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -27,7 +30,7 @@ export default function BankrollPage() {
         } catch (err) {
             toast.error('Failed to load bankroll data');
         } finally {
-            setLoading(false);
+            setTimeout(() => setLoading(false), 200);
         }
     };
 
@@ -37,6 +40,7 @@ export default function BankrollPage() {
         e.preventDefault();
         if (!newBalance) return;
         
+        setSaving(true);
         const saveToast = toast.loading('Saving snapshot...');
         try {
             await addBankrollSnapshot({ balance: parseFloat(newBalance), note });
@@ -46,8 +50,11 @@ export default function BankrollPage() {
             load();
         } catch (err) {
             toast.error('Failed to save snapshot', { id: saveToast });
+        } finally {
+            setSaving(false);
         }
     };
+
 
 
     // Chart data
@@ -88,8 +95,26 @@ export default function BankrollPage() {
     const startBalance = snapshots[0]?.balance ?? currentBalance;
     const growth = startBalance > 0 ? ((currentBalance - startBalance) / startBalance * 100) : 0;
 
+    if (loading) return (
+        <div className="fade-in">
+            <div className="page-header">
+                <h1>Bankroll Tracker</h1>
+                <p>Monitor your bankroll growth and manage staking</p>
+            </div>
+            <div className="grid-3 section">
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+            </div>
+            <div className="grid-2">
+                <ChartSkeleton />
+                <CardSkeleton />
+            </div>
+        </div>
+    );
+
     return (
-        <div>
+        <div className="fade-in">
             <div className="page-header">
                 <h1>Bankroll Tracker</h1>
                 <p>Monitor your bankroll growth and manage staking</p>
@@ -113,9 +138,7 @@ export default function BankrollPage() {
                 {/* Chart */}
                 <div className="card" style={{ gridColumn: 'span 1' }}>
                     <div className="card-header"><div className="card-title">📈 Bankroll History</div></div>
-                    {loading ? (
-                        <div className="loading-wrapper"><div className="spinner" /></div>
-                    ) : snapshots.length < 2 ? (
+                    {snapshots.length < 2 ? (
                         <div className="empty-state"><p>Add at least 2 snapshots to see the chart.</p></div>
                     ) : (
                         <Line data={chartData} options={chartOptions} />
@@ -146,10 +169,12 @@ export default function BankrollPage() {
                             />
                         </div>
                         <button className="btn btn-primary" type="submit" id="bankroll-submit-btn"
+                            disabled={saving}
                             style={{ width: '100%', justifyContent: 'center' }}>
-                            ✅ Save Snapshot
+                            {saving ? '⏳ Saving…' : '✅ Save Snapshot'}
                         </button>
                     </form>
+
 
                     <div style={{ marginTop: '1.5rem' }}>
                         <div className="card-title" style={{ marginBottom: '0.75rem' }}>📋 Recent Snapshots</div>

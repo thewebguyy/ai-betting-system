@@ -8,6 +8,8 @@ import {
 
 ChartJS.register(BarElement, ArcElement, Tooltip, Legend, CategoryScale, LinearScale);
 
+import { CardSkeleton, ChartSkeleton } from '../components/Skeleton';
+
 export default function AnalyticsPage() {
     const [analytics, setAnalytics] = useState(null);
     const [bets, setBets] = useState([]);
@@ -25,7 +27,7 @@ export default function AnalyticsPage() {
             console.error('Analytics load error:', e);
             setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
         } finally {
-            setLoading(false);
+            setTimeout(() => setLoading(false), 200);
         }
     }, []);
 
@@ -33,10 +35,26 @@ export default function AnalyticsPage() {
         load();
     }, [load]);
 
-    if (loading) return <div className="loading-wrapper"><div className="spinner" /><span>Loading analytics…</span></div>;
+    if (loading) return (
+        <div className="fade-in">
+            <div className="page-header">
+                <h1>Performance Analytics</h1>
+                <p>Deep dive into model accuracy and profitability</p>
+            </div>
+            <div className="grid-3 section">
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+            </div>
+            <div className="grid-2">
+                <ChartSkeleton />
+                <ChartSkeleton />
+            </div>
+        </div>
+    );
 
     if (error) return (
-        <div style={{ padding: '4rem', textAlign: 'center' }}>
+        <div className="fade-in" style={{ padding: '4rem', textAlign: 'center' }}>
             <div className="card">
                 <div className="icon" style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
                 <h2>Analytics Unavailable</h2>
@@ -47,6 +65,7 @@ export default function AnalyticsPage() {
             </div>
         </div>
     );
+
 
 
     // Win/Draw/Loss doughnut
@@ -114,8 +133,9 @@ export default function AnalyticsPage() {
 
 
     return (
-        <div>
+        <div className="fade-in">
             <div className="page-header">
+
                 <h1>Analytics</h1>
                 <p>Detailed performance metrics and visualisations</p>
             </div>

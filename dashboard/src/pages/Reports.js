@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getReports, generateReport } from '../api';
+import { CardSkeleton } from '../components/Skeleton';
+
 
 export default function ReportsPage() {
     const [reports, setReports] = useState([]);
@@ -16,7 +18,7 @@ export default function ReportsPage() {
         } catch (err) {
             setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
         } finally {
-            setLoading(false);
+            setTimeout(() => setLoading(false), 200);
         }
     };
 
@@ -31,8 +33,23 @@ export default function ReportsPage() {
 
     const TYPE_ICON = { daily: '📅', match: '🏟', performance: '📈' };
 
+    if (loading) return (
+        <div className="fade-in">
+            <div className="page-header">
+                <h1>Reports</h1>
+                <p>AI-generated match intelligence and performance reports</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+            </div>
+        </div>
+    );
+
     return (
-        <div>
+        <div className="fade-in">
+
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <h1>Reports</h1>
