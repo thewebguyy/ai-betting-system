@@ -7,21 +7,22 @@
 
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root {
-  --bg-primary:     #0a0e1a;
-  --bg-secondary:   #0f1629;
-  --bg-card:        rgba(15, 22, 41, 0.85);
-  --bg-elevated:    rgba(20, 30, 58, 0.9);
+  --bg-primary:     #1a1f2c; /* Deeper PredictZ blue-gray */
+  --bg-secondary:   #131722;
+  --bg-card:        #1e2433;
+  --bg-elevated:    #252b3d;
 
-  --accent-green:   #00d4aa;
-  --accent-blue:    #3b82f6;
-  --accent-purple:  #8b5cf6;
-  --accent-orange:  #f97316;
-  --accent-red:     #ef4444;
-  --accent-yellow:  #eab308;
+  --accent-green:   #00ffc3; /* Neon PredictZ green */
+  --accent-blue:    #7e86ff; /* PredictZ odds purple/blue */
+  --accent-purple:  #bd93f9;
+  --accent-orange:  #ffb86c;
+  --accent-red:     #ff5555;
+  --accent-yellow:  #f1fa8c;
 
-  --text-primary:   #f1f5f9;
+  --text-primary:   #f8f8f2;
   --text-secondary: #94a3b8;
-  --text-muted:     #475569;
+  --text-muted:     #6272a4;
+
 
   --border:         rgba(148, 163, 184, 0.08);
   --border-active:  rgba(0, 212, 170, 0.3);
@@ -73,42 +74,124 @@ h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
 h3 { font-size: 1.125rem; font-weight: 600; }
 p  { color: var(--text-secondary); }
 
-/* ── Layout ────────────────────────────────────────────────── */
-.app-layout {
+/* ── Sidebar ────────────────────────────────────────────────── */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: 240px;
+  background: rgba(10, 14, 26, 0.98);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(20px);
   display: flex;
-  min-height: 100vh;
+  flex-direction: column;
+  z-index: 1000;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.main-content {
+.sidebar-logo {
+  padding: 1.5rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sidebar-nav {
   flex: 1;
-  margin-left: 240px;
-  padding: 2rem;
-  max-width: 1400px;
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.page-header {
-  margin-bottom: 2rem;
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: var(--transition);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
 }
 
-.page-header h1 {
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-green) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
 }
 
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
-
-@media (max-width: 1024px) {
-  .grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+.sidebar-link.active {
+  color: var(--accent-green);
+  background: rgba(0, 212, 170, 0.08);
+  border-color: rgba(0, 212, 170, 0.15);
 }
+
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1100;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.25rem;
+  backdrop-filter: blur(10px);
+}
+
+.offline-banner {
+  position: fixed;
+  top: 0; left: 240px; right: 0;
+  background: rgba(255, 85, 85, 0.95);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  backdrop-filter: blur(10px);
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
 @media (max-width: 768px) {
-  .main-content { margin-left: 0; padding: 1rem; }
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .offline-banner {
+    left: 0;
+  }
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+  }
+  .hamburger {
+    display: flex;
+  }
+  .main-content {
+    margin-left: 0;
+    padding: 1rem;
+    padding-top: 4rem; /* Space for hamburger */
+  }
 }
+@media (min-width: 769px) {
+  .main-content {
+    margin-left: 240px;
+    padding: 2rem;
+  }
+}
+
 
 /* ── Cards ─────────────────────────────────────────────────── */
 .card {
@@ -415,5 +498,39 @@ tbody tr:hover td {
   padding: 3rem;
   color: var(--text-muted);
 }
-.empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
-.empty-state p { font-size: 0.875rem; }
+/* ── PredictZ Styles ───────────────────────────────────────── */
+.form-box {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 4px;
+  margin: 0 1px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.form-w { background: rgba(0, 255, 195, 0.15); color: var(--accent-green); border-color: var(--accent-green); }
+.form-d { background: rgba(241, 250, 140, 0.15); color: var(--accent-yellow); border-color: var(--accent-yellow); }
+.form-l { background: rgba(255, 85, 85, 0.15); color: var(--accent-red); border-color: var(--accent-red); }
+
+.prediction-btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.prediction-btn.home { border-color: var(--accent-green); color: var(--accent-green); }
+.prediction-btn.draw { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+.prediction-btn.away { border-color: var(--accent-red); color: var(--accent-red); }
+
+.odds-value {
+  color: var(--accent-blue);
+  font-weight: 500;
+}

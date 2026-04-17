@@ -194,57 +194,62 @@ export default function Dashboard() {
                                 const isValue = p.is_value_bet;
                                 
                                 return (
-                                <tr key={p.match_id} style={{ borderBottom: '1px solid var(--border)', background: isHighConfidence ? 'rgba(46, 204, 113, 0.05)' : 'transparent' }}>
-                                    <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                <tr key={p.match_id} style={{ borderBottom: '1px solid var(--border)', background: isHighConfidence ? 'rgba(0, 255, 195, 0.02)' : 'transparent' }}>
+                                    <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                                         {timeStr}
                                     </td>
                                     <td style={{ padding: '1rem' }}>
-                                        <div style={{ fontWeight: 600 }}>{p.home_team}</div>
-                                        <div style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{p.away_team}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'space-between' }}>
+                                            <div style={{ display: 'flex', gap: '2px' }}>
+                                                {['W', 'D', 'D', 'L', 'W'].map((f, i) => (
+                                                    <span key={i} className={`form-box form-${f.toLowerCase()}`}>{f}</span>
+                                                ))}
+                                            </div>
+                                            <div style={{ textAlign: 'center', flex: 1, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                {p.home_team} v {p.away_team}
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '2px' }}>
+                                                {['L', 'W', 'W', 'D', 'L'].map((f, i) => (
+                                                    <span key={i} className={`form-box form-${f.toLowerCase()}`}>{f}</span>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-                                            <span style={{ padding: '0.2rem 0.5rem', background: 'var(--bg-elevated)', borderRadius: '4px' }}>{(p.probs.home * 100).toFixed(0)}%</span>
-                                            <span style={{ padding: '0.2rem 0.5rem', background: 'var(--bg-elevated)', borderRadius: '4px' }}>{(p.probs.draw * 100).toFixed(0)}%</span>
-                                            <span style={{ padding: '0.2rem 0.5rem', background: 'var(--bg-elevated)', borderRadius: '4px' }}>{(p.probs.away * 100).toFixed(0)}%</span>
+                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+                                            <div className="odds-value">{p.odds?.home || '—'}</div>
+                                            <div className="odds-value">{p.odds?.draw || '—'}</div>
+                                            <div className="odds-value">{p.odds?.away || '—'}</div>
                                         </div>
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'center' }}>
                                         {isValue ? (
-                                            <div>
-                                                <span style={{ fontWeight: 600, color: 'var(--accent-green)' }}>{p.best_value.selection}</span>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@ {p.best_value.odds} ({p.bookmaker})</div>
-                                            </div>
+                                            <button className={`prediction-btn ${p.best_value.selection.toLowerCase().includes('home') || p.best_value.selection === '1' ? 'home' : p.best_value.selection.toLowerCase().includes('away') || p.best_value.selection === '2' ? 'away' : 'draw'}`}>
+                                                {p.best_value.selection}
+                                            </button>
                                         ) : (
-                                            <span style={{ color: 'var(--text-muted)' }}>No Value</span>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>NO EDGE</span>
                                         )}
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'center' }}>
                                         {isValue ? (
-                                            <div className="badge badge-green" style={{ display: 'inline-block' }}>
+                                            <span className={`badge ${p.best_value.ev > 0.1 ? 'badge-green' : 'badge-yellow'}`}>
                                                 +{(p.best_value.ev * 100).toFixed(1)}%
-                                            </div>
-                                        ) : (
-                                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                                        )}
+                                            </span>
+                                        ) : '—'}
                                     </td>
-                                    <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                        {isValue ? (
-                                            <div style={{ fontWeight: 600 }}>
-                                                ${parseFloat(p.best_value.suggested_stake).toFixed(2)}
-                                            </div>
-                                        ) : (
-                                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                                        )}
+                                    <td style={{ padding: '1rem', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
+                                        {isValue ? `$${parseFloat(p.best_value.suggested_stake).toFixed(2)}` : '—'}
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'center' }}>
                                         {isValue && (
-                                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }} disabled={mode === 'research'}>
-                                                {mode === 'research' ? 'Simulate' : 'Place Bet'}
+                                            <button className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem' }}>
+                                                Place
                                             </button>
                                         )}
                                     </td>
                                 </tr>
+
                             )})}
                         </tbody>
                     </table>

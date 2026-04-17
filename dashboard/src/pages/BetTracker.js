@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { getBets, placeBet, settleBet } from '../api';
+import toast from 'react-hot-toast';
 
 const RESULT_BADGE = {
     won: 'badge-green', lost: 'badge-red',
     void: 'badge-purple', pending: 'badge-yellow', push: 'badge-blue',
 };
+
 
 export default function BetTracker() {
     const [bets, setBets] = useState([]);
@@ -18,32 +20,50 @@ export default function BetTracker() {
 
     const load = async () => {
         setLoading(true);
-        const data = await getBets({ limit: 100 });
-        setBets(data);
-        setLoading(false);
+        try {
+            const data = await getBets({ limit: 100 });
+            setBets(Array.isArray(data) ? data : []);
+        } catch (err) {
+            toast.error('Failed to load bets');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { load(); }, []);
 
     const handlePlace = async (e) => {
         e.preventDefault();
-        await placeBet({
-            ...form,
-            decimal_odds: parseFloat(form.decimal_odds),
-            stake: parseFloat(form.stake),
-        });
-        setForm({ bookmaker: '', market: '1X2', selection: '', decimal_odds: '', stake: '', notes: '' });
-        load();
+        const tid = toast.loading('Placing bet...');
+        try {
+            await placeBet({
+                ...form,
+                decimal_odds: parseFloat(form.decimal_odds),
+                stake: parseFloat(form.stake),
+            });
+            setForm({ bookmaker: '', market: '1X2', selection: '', decimal_odds: '', stake: '', notes: '' });
+            toast.success('Bet placed!', { id: tid });
+            load();
+        } catch (err) {
+            toast.error('Failed to place bet', { id: tid });
+        }
     };
 
     const handleSettle = async (id) => {
-        await settleBet(id, {
-            result: settleData.result,
-            actual_payout: parseFloat(settleData.actual_payout) || 0,
-        });
-        setSettling(null);
-        load();
+        const tid = toast.loading('Settling bet...');
+        try {
+            await settleBet(id, {
+                result: settleData.result,
+                actual_payout: parseFloat(settleData.actual_payout) || 0,
+            });
+            setSettling(null);
+            toast.success('Bet settled', { id: tid });
+            load();
+        } catch (err) {
+            toast.error('Settlement failed', { id: tid });
+        }
     };
+
 
     return (
         <div>

@@ -5,8 +5,10 @@ import {
     Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale,
     Filler, Tooltip, Legend,
 } from 'chart.js';
+import toast from 'react-hot-toast';
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip, Legend);
+
 
 export default function BankrollPage() {
     const [snapshots, setSnapshots] = useState([]);
@@ -22,8 +24,9 @@ export default function BankrollPage() {
             const validSnapshots = Array.isArray(s) ? s : [];
             setSnapshots([...validSnapshots].reverse()); // chronological
             setBets(Array.isArray(b) ? b : []);
+        } catch (err) {
+            toast.error('Failed to load bankroll data');
         } finally {
-
             setLoading(false);
         }
     };
@@ -33,11 +36,19 @@ export default function BankrollPage() {
     const handleAddSnapshot = async (e) => {
         e.preventDefault();
         if (!newBalance) return;
-        await addBankrollSnapshot({ balance: parseFloat(newBalance), note });
-        setNewBalance('');
-        setNote('');
-        load();
+        
+        const saveToast = toast.loading('Saving snapshot...');
+        try {
+            await addBankrollSnapshot({ balance: parseFloat(newBalance), note });
+            setNewBalance('');
+            setNote('');
+            toast.success('Snapshot saved successfully', { id: saveToast });
+            load();
+        } catch (err) {
+            toast.error('Failed to save snapshot', { id: saveToast });
+        }
     };
+
 
     // Chart data
     const chartData = {

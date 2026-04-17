@@ -9,8 +9,6 @@ if (BASE_URL && !BASE_URL.startsWith('http')) {
     BASE_URL = 'https://' + BASE_URL;
 }
 
-
-
 console.log('API Base URL:', BASE_URL);
 
 const api = axios.create({
@@ -18,9 +16,26 @@ const api = axios.create({
     timeout: 10000,
 });
 
+// ── Interceptors ─────────────────────────────────────────────────────────────
+api.interceptors.response.use(
+    (response) => {
+        // Successful response - backend is up
+        window.dispatchEvent(new CustomEvent('backend-status-change', { detail: { isDown: false } }));
+        return response;
+    },
+    (error) => {
+        // Check for timeout or network failure
+        const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
+        const isNetworkError = !error.response; // No response from server
+        const isServiceUnavailable = error.response && error.response.status === 503;
 
-
-// Authentication removed since this is a local single-user instance
+        if (isTimeout || isNetworkError || isServiceUnavailable) {
+            console.error('Backend unreachable:', error.message);
+            window.dispatchEvent(new CustomEvent('backend-status-change', { detail: { isDown: true, error: error.message } }));
+        }
+        return Promise.reject(error);
+    }
+);
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const login = async (username, password) => {
@@ -73,3 +88,4 @@ export const generateReport = (type, matchId) =>
     api.post('/reports/generate', null, { params: { report_type: type, match_id: matchId } }).then(r => r.data);
 
 export default api;
+

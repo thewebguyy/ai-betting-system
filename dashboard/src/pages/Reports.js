@@ -5,13 +5,21 @@ export default function ReportsPage() {
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
+    const [error, setError] = useState(null);
 
     const load = async () => {
         setLoading(true);
-        const data = await getReports();
-        setReports(data);
-        setLoading(false);
+        setError(null);
+        try {
+            const data = await getReports();
+            setReports(Array.isArray(data) ? data : []);
+        } catch (err) {
+            setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
+        } finally {
+            setLoading(false);
+        }
     };
+
 
     useEffect(() => { load(); }, []);
 
@@ -41,7 +49,13 @@ export default function ReportsPage() {
             </div>
 
             {loading ? (
-                <div className="loading-wrapper"><div className="spinner" /></div>
+                <div className="loading-wrapper"><div className="spinner" /><span>Loading reports…</span></div>
+            ) : error ? (
+                <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+                    <div className="icon" style={{ fontSize: '2rem', marginBottom: '1rem' }}>📡</div>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{error}</p>
+                    <button className="btn btn-secondary" onClick={load}>🔄 Retry Connection</button>
+                </div>
             ) : reports.length === 0 ? (
                 <div className="card"><div className="empty-state">
                     <div className="icon">📄</div>

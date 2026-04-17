@@ -12,22 +12,28 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const toggle = () => setIsOpen(!isOpen);
+    const close = () => setIsOpen(false);
+
     return (
-        <aside style={{
-            position: 'fixed',
-            left: 0, top: 0, bottom: 0,
-            width: 240,
-            background: 'rgba(10, 14, 26, 0.95)',
-            borderRight: '1px solid var(--border)',
-            backdropFilter: 'blur(20px)',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 100,
-            padding: '1.5rem 0',
-        }}>
-            {/* Logo */}
-            <div style={{ padding: '0 1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <>
+            <button className="hamburger" onClick={toggle} aria-label="Toggle Menu">
+                {isOpen ? '✕' : '☰'}
+            </button>
+
+            {isOpen && <div 
+                onClick={close}
+                style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', 
+                    zIndex: 900, backdropFilter: 'blur(4px)'
+                }} 
+            />}
+
+            <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+                {/* Logo */}
+                <div className="sidebar-logo">
                     <div style={{
                         width: 36, height: 36,
                         background: 'linear-gradient(135deg, var(--accent-green), var(--accent-blue))',
@@ -40,42 +46,31 @@ export default function Sidebar() {
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Intelligence System</div>
                     </div>
                 </div>
-            </div>
 
-            {/* Nav */}
-            <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {navItems.map(({ to, icon, label }) => (
-                    <NavLink
-                        key={to}
-                        to={to}
-                        end={to === '/'}
-                        style={({ isActive }) => ({
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.625rem',
-                            padding: '0.625rem 0.875rem',
-                            borderRadius: 'var(--radius-sm)',
-                            textDecoration: 'none',
-                            fontSize: '0.875rem',
-                            fontWeight: 500,
-                            transition: 'var(--transition)',
-                            color: isActive ? 'var(--accent-green)' : 'var(--text-secondary)',
-                            background: isActive ? 'rgba(0, 212, 170, 0.08)' : 'transparent',
-                            border: isActive ? '1px solid rgba(0, 212, 170, 0.15)' : '1px solid transparent',
-                        })}
-                    >
-                        <span>{icon}</span>
-                        <span>{label}</span>
-                    </NavLink>
-                ))}
-            </nav>
+                {/* Nav */}
+                <nav className="sidebar-nav">
+                    {navItems.map(({ to, icon, label }) => (
+                        <NavLink
+                            key={to}
+                            to={to}
+                            end={to === '/'}
+                            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                            onClick={close}
+                        >
+                            <span>{icon}</span>
+                            <span>{label}</span>
+                        </NavLink>
+                    ))}
+                </nav>
 
-            {/* Footer */}
-            <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid var(--border)' }}>
-                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.75rem' }}>
-                    For personal use only
-                </p>
-            </div>
-        </aside>
+                {/* Footer */}
+                <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                        For personal use only
+                    </p>
+                </div>
+            </aside>
+        </>
     );
 }
+

@@ -16,13 +16,17 @@ export default function ValueBetsPage() {
     const [minEv, setMinEv] = useState(0);
     const [filterStatus, setFilterStatus] = useState('');
 
+    const [error, setError] = useState(null);
+
     const load = async () => {
         setLoading(true);
+        setError(null);
         try {
             const data = await getValueBets({ min_ev: minEv, status: filterStatus || undefined, limit: 100 });
             setBets(Array.isArray(data) ? data : []);
+        } catch (err) {
+            setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
         } finally {
-
             setLoading(false);
         }
     };
@@ -76,6 +80,12 @@ export default function ValueBetsPage() {
 
             {loading ? (
                 <div className="loading-wrapper"><div className="spinner" /><span>Loading value bets…</span></div>
+            ) : error ? (
+                <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+                    <div className="icon" style={{ fontSize: '2rem', marginBottom: '1rem' }}>📡</div>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{error}</p>
+                    <button className="btn btn-secondary" onClick={load}>🔄 Retry Connection</button>
+                </div>
             ) : bets.length === 0 ? (
                 <div className="card"><div className="empty-state">
                     <div className="icon">🎯</div>
@@ -104,8 +114,14 @@ export default function ValueBetsPage() {
                                 <tr key={vb.id}>
                                     <td>{vb.match_id ?? '—'}</td>
                                     <td>{vb.bookmaker}</td>
-                                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{vb.selection}</td>
-                                    <td style={{ color: 'var(--accent-blue)' }}>{vb.decimal_odds}</td>
+                                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                             <button className={`prediction-btn ${vb.selection.toLowerCase().includes('home') || vb.selection === '1' ? 'home' : vb.selection.toLowerCase().includes('away') || vb.selection === '2' ? 'away' : 'draw'}`}>
+                                                 {vb.selection}
+                                             </button>
+                                         </div>
+                                    </td>
+                                    <td className="odds-value">{vb.decimal_odds}</td>
                                     <td>{(vb.model_prob * 100).toFixed(1)}%</td>
                                     <td>{(vb.true_implied * 100).toFixed(1)}%</td>
                                     <td style={{ color: 'var(--accent-green)', fontWeight: 600 }}>
@@ -118,8 +134,9 @@ export default function ValueBetsPage() {
                                     </td>
                                     <td>{vb.suggested_stake?.toFixed(2) ?? '—'}</td>
                                     <td><span className={`badge ${STATUS_BADGE[vb.status] || 'badge-yellow'}`}>{vb.status}</span></td>
-                                    <td>{new Date(vb.detected_at).toLocaleString()}</td>
+                                    <td style={{ fontSize: '0.7rem' }}>{new Date(vb.detected_at).toLocaleString()}</td>
                                 </tr>
+
                             ))}
                         </tbody>
                     </table>

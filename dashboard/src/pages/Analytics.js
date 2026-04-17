@@ -12,25 +12,42 @@ export default function AnalyticsPage() {
     const [analytics, setAnalytics] = useState(null);
     const [bets, setBets] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const load = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [a, b] = await Promise.all([getAnalytics(), getBets({ limit: 200 })]);
+            setAnalytics(a || {});
+            setBets(Array.isArray(b) ? b : []);
+        } catch (e) {
+            console.error('Analytics load error:', e);
+            setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        (async () => {
-            try {
-                const [a, b] = await Promise.all([getAnalytics(), getBets({ limit: 200 })]);
-                setAnalytics(a || {});
-                setBets(Array.isArray(b) ? b : []);
-            } catch (e) {
-                console.error('Analytics load error:', e);
-                setAnalytics({});
-                setBets([]);
-            } finally {
-                setLoading(false);
-            }
-        })();
+        load();
     }, []);
 
+    if (loading) return <div className="loading-wrapper"><div className="spinner" /><span>Loading analytics…</span></div>;
 
-    if (loading) return <div className="loading-wrapper"><div className="spinner" /></div>;
+    if (error) return (
+        <div style={{ padding: '4rem', textAlign: 'center' }}>
+            <div className="card">
+                <div className="icon" style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
+                <h2>Analytics Unavailable</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem' }}>
+                    {error}
+                </p>
+                <button className="btn btn-primary" onClick={load}>🔄 Retry Connection</button>
+            </div>
+        </div>
+    );
+
 
     // Win/Draw/Loss doughnut
     const doughnutData = {
