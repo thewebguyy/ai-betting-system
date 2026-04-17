@@ -14,7 +14,7 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const load = async () => {
+    const load = React.useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
@@ -27,11 +27,11 @@ export default function AnalyticsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         load();
-    }, []);
+    }, [load]);
 
     if (loading) return <div className="loading-wrapper"><div className="spinner" /><span>Loading analytics…</span></div>;
 
@@ -50,29 +50,29 @@ export default function AnalyticsPage() {
 
 
     // Win/Draw/Loss doughnut
-    const doughnutData = {
+    const doughnutData = React.useMemo(() => ({
         labels: ['Won', 'Lost', 'Void', 'Pending'],
         datasets: [{
             data: [analytics?.won || 0, analytics?.lost || 0, analytics?.void || 0, analytics?.pending || 0],
-            backgroundColor: ['#00d4aa', '#ef4444', '#8b5cf6', '#475569'],
+            backgroundColor: ['#00ffc3', '#ff5555', '#bd93f9', '#6272a4'],
             borderWidth: 0,
         }],
-
-    };
+    }), [analytics]);
 
     // Profit by bet (bar chart — last 20 settled)
-    const settled = bets.filter(b => b.result !== 'pending').slice(-20);
-    const barData = {
+    const settled = React.useMemo(() => bets.filter(b => b.result !== 'pending').slice(-20), [bets]);
+    
+    const barData = React.useMemo(() => ({
         labels: settled.map((_, i) => `Bet ${i + 1}`),
         datasets: [{
             label: 'Profit/Loss',
             data: settled.map(b => parseFloat((b.actual_payout - b.stake).toFixed(2))),
-            backgroundColor: settled.map(b => b.result === 'won' ? 'rgba(0,212,170,0.7)' : 'rgba(239,68,68,0.7)'),
+            backgroundColor: settled.map(b => b.result === 'won' ? 'rgba(0,255,195,0.7)' : 'rgba(255,85,85,0.7)'),
             borderRadius: 4,
         }],
-    };
+    }), [settled]);
 
-    const chartOptions = {
+    const chartOptions = React.useMemo(() => ({
         responsive: true,
         plugins: {
             legend: { display: false },
@@ -85,12 +85,12 @@ export default function AnalyticsPage() {
             },
         },
         scales: {
-            x: { grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { color: '#475569' } },
-            y: { grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { color: '#475569' } },
+            x: { grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { color: '#6272a4' } },
+            y: { grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { color: '#6272a4' } },
         },
-    };
+    }), []);
 
-    const doughnutOptions = {
+    const doughnutOptions = React.useMemo(() => ({
         responsive: true,
         maintainAspectRatio: true,
         plugins: {
@@ -100,16 +100,17 @@ export default function AnalyticsPage() {
             },
         },
         cutout: '65%',
-    };
+    }), []);
 
-    const kpis = [
+    const kpis = React.useMemo(() => [
         { label: 'ROI', value: `${(analytics?.roi || 0).toFixed(2)}%`, color: (analytics?.roi || 0) >= 0 ? 'positive' : 'negative' },
         { label: 'Yield', value: `${(analytics?.yield_pct || 0).toFixed(2)}%`, color: (analytics?.yield_pct || 0) >= 0 ? 'positive' : 'negative' },
         { label: 'Hit Rate', value: `${(analytics?.hit_rate || 0).toFixed(1)}%`, color: 'neutral' },
         { label: 'Avg Odds', value: (analytics?.avg_odds || 0).toFixed(3), color: 'neutral' },
         { label: 'Total Staked', value: (analytics?.total_staked || 0).toFixed(2), color: 'neutral' },
         { label: 'Net Profit', value: `${(analytics?.total_profit || 0) >= 0 ? '+' : ''}${(analytics?.total_profit || 0).toFixed(2)}`, color: (analytics?.total_profit || 0) >= 0 ? 'positive' : 'negative' },
-    ];
+    ], [analytics]);
+
 
 
     return (

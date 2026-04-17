@@ -48,7 +48,36 @@ function BackendOfflineBanner({ error }) {
     );
 }
 
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() { return { hasError: true }; }
+    componentDidCatch(error, errorInfo) { console.error("Layout Error Boundary caught:", error, errorInfo); }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: '4rem', textAlign: 'center' }}>
+                    <div className="card" style={{ maxWidth: '500px', margin: '0 auto' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+                        <h2>Something went wrong</h2>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+                            A critical error occurred while loading this view.
+                        </p>
+                        <button className="btn btn-primary" onClick={() => window.location.reload()}>
+                            🔄 Reload Dashboard
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 function ProtectedLayout() {
+
     const [isBackendDown, setIsBackendDown] = useState(false);
     const [backendError, setBackendError] = useState('');
 
@@ -66,19 +95,22 @@ function ProtectedLayout() {
             {isBackendDown && <BackendOfflineBanner error={backendError} />}
             <Sidebar />
             <main className="main-content" style={{ marginTop: isBackendDown ? '48px' : 0 }}>
-                <Suspense fallback={<PageLoader />}>
-                    <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/value-bets" element={<ValueBets />} />
-                        <Route path="/bankroll" element={<Bankroll />} />
-                        <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/bets" element={<BetTracker />} />
-                        <Route path="/reports" element={<Reports />} />
-                        <Route path="/ev-calc" element={<EVCalculator />} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
-                </Suspense>
+                <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                        <Routes>
+                            <Route path="/" element={<Dashboard />} />
+                            <Route path="/value-bets" element={<ValueBets />} />
+                            <Route path="/bankroll" element={<Bankroll />} />
+                            <Route path="/analytics" element={<Analytics />} />
+                            <Route path="/bets" element={<BetTracker />} />
+                            <Route path="/reports" element={<Reports />} />
+                            <Route path="/ev-calc" element={<EVCalculator />} />
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </Suspense>
+                </ErrorBoundary>
             </main>
+
 
         </div>
     );

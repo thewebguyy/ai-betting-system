@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { getAnalytics, getBankroll, triggerScan, fetchLiveOdds, getTodayPredictions } from '../api';
 import { useWebSocket } from '../useWebSocket';
 
-function MetricCard({ label, value, sub, color = 'neutral' }) {
+const MetricCard = React.memo(({ label, value, sub, color = 'neutral' }) => {
     return (
         <div className="metric-card">
             <div className="metric-label">{label}</div>
@@ -10,7 +10,7 @@ function MetricCard({ label, value, sub, color = 'neutral' }) {
             {sub && <div className="metric-sub">{sub}</div>}
         </div>
     );
-}
+});
 
 export default function Dashboard() {
     const [analytics, setAnalytics] = useState(null);
@@ -54,7 +54,7 @@ export default function Dashboard() {
         }
     }, [alerts, loadData]);
 
-    const handleScan = async () => {
+    const handleScan = useCallback(async () => {
         setScanning(true);
         try {
             await triggerScan();
@@ -62,16 +62,17 @@ export default function Dashboard() {
         } finally {
             setScanning(false);
         }
-    };
+    }, [loadData]);
 
-    const handleFetchOdds = async () => {
+    const handleFetchOdds = useCallback(async () => {
         await fetchLiveOdds();
         setTimeout(loadData, 3000);
-    };
+    }, [loadData]);
 
-    const toggleMode = () => {
+    const toggleMode = useCallback(() => {
         setMode(prev => prev === 'research' ? 'live' : 'research');
-    };
+    }, []);
+
 
     const currentBalance = bankroll[0]?.balance ?? 0;
     const roiColor = analytics?.roi >= 0 ? 'positive' : 'negative';

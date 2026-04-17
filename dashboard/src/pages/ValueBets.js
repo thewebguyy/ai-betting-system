@@ -9,6 +9,33 @@ const STATUS_BADGE = {
     void: 'badge-purple',
 };
 
+import { FixedSizeList as List } from 'react-window';
+
+const ValueBetRow = React.memo(({ index, data, style }) => {
+    const vb = data[index];
+    return (
+        <div style={{ ...style, display: 'flex', borderBottom: '1px solid var(--border)', alignItems: 'center', padding: '0 1rem', background: index % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+            <div style={{ flex: 1, fontSize: '0.8rem' }}>{vb.match_id ?? '—'}</div>
+            <div style={{ flex: 1.5 }}>{vb.bookmaker}</div>
+            <div style={{ flex: 2 }}>
+                <button className={`prediction-btn ${vb.selection.toLowerCase().includes('home') || vb.selection === '1' ? 'home' : vb.selection.toLowerCase().includes('away') || vb.selection === '2' ? 'away' : 'draw'}`}>
+                    {vb.selection}
+                </button>
+            </div>
+            <div style={{ flex: 1 }} className="odds-value">{vb.decimal_odds}</div>
+            <div style={{ flex: 1 }}>{(vb.model_prob * 100).toFixed(1)}%</div>
+            <div style={{ flex: 1, color: 'var(--accent-green)', fontWeight: 600 }}>+{(vb.edge * 100).toFixed(2)}%</div>
+            <div style={{ flex: 1 }}>
+                <span className={`badge ${vb.ev >= 0.05 ? 'badge-green' : 'badge-yellow'}`}>
+                    {(vb.ev * 100).toFixed(1)}%
+                </span>
+            </div>
+            <div style={{ flex: 1.5 }}><span className={`badge ${STATUS_BADGE[vb.status] || 'badge-yellow'}`}>{vb.status}</span></div>
+            <div style={{ flex: 2, fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(vb.detected_at).toLocaleString()}</div>
+        </div>
+    );
+});
+
 export default function ValueBetsPage() {
     const [bets, setBets] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -18,22 +45,24 @@ export default function ValueBetsPage() {
 
     const [error, setError] = useState(null);
 
-    const load = async () => {
+    const load = React.useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await getValueBets({ min_ev: minEv, status: filterStatus || undefined, limit: 100 });
+            const data = await getValueBets({ min_ev: minEv, status: filterStatus || undefined, limit: 500 });
             setBets(Array.isArray(data) ? data : []);
         } catch (err) {
-            setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
+            if (err.name !== 'CanceledError') {
+                setError('Cannot connect to Intelligence Engine. Please check your network or try again.');
+            }
         } finally {
             setLoading(false);
         }
-    };
+    }, [minEv, filterStatus]);
 
-    useEffect(() => { load(); }, [minEv, filterStatus]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
 
-    const handleScan = async () => {
+    const handleScan = React.useCallback(async () => {
         setScanning(true);
         try {
             await triggerScan();
@@ -41,11 +70,11 @@ export default function ValueBetsPage() {
         } finally {
             setScanning(false);
         }
-    };
+    }, [load]);
 
     return (
-        <div>
-            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
                 <div>
                     <h1>Value Bets</h1>
                     <p>Opportunities where model probability exceeds implied odds</p>
@@ -56,7 +85,7 @@ export default function ValueBetsPage() {
             </div>
 
             {/* Filters */}
-            <div className="card" style={{ marginBottom: '1.5rem', display: 'flex', gap: '1.5rem', alignItems: 'flex-end' }}>
+            <div className="card" style={{ marginBottom: '1.5rem', display: 'flex', gap: '1.5rem', alignItems: 'flex-end', flexShrink: 0 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Min EV (%)</label>
                     <input className="form-input" type="number" step="0.01" min="0" max="1"
@@ -92,56 +121,35 @@ export default function ValueBetsPage() {
                     <p>No value bets found. Adjust filters or run a scan.</p>
                 </div></div>
             ) : (
-                <div className="table-container card" style={{ padding: 0 }}>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Match ID</th>
-                                <th>Bookmaker</th>
-                                <th>Selection</th>
-                                <th>Odds</th>
-                                <th>Model Prob</th>
-                                <th>Implied</th>
-                                <th>Edge</th>
-                                <th>EV</th>
-                                <th>Kelly Stake</th>
-                                <th>Status</th>
-                                <th>Detected</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {bets.map((vb) => (
-                                <tr key={vb.id}>
-                                    <td>{vb.match_id ?? '—'}</td>
-                                    <td>{vb.bookmaker}</td>
-                                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                             <button className={`prediction-btn ${vb.selection.toLowerCase().includes('home') || vb.selection === '1' ? 'home' : vb.selection.toLowerCase().includes('away') || vb.selection === '2' ? 'away' : 'draw'}`}>
-                                                 {vb.selection}
-                                             </button>
-                                         </div>
-                                    </td>
-                                    <td className="odds-value">{vb.decimal_odds}</td>
-                                    <td>{(vb.model_prob * 100).toFixed(1)}%</td>
-                                    <td>{(vb.true_implied * 100).toFixed(1)}%</td>
-                                    <td style={{ color: 'var(--accent-green)', fontWeight: 600 }}>
-                                        +{(vb.edge * 100).toFixed(2)}%
-                                    </td>
-                                    <td>
-                                        <span className={`badge ${vb.ev >= 0.05 ? 'badge-green' : 'badge-yellow'}`}>
-                                            {(vb.ev * 100).toFixed(1)}%
-                                        </span>
-                                    </td>
-                                    <td>{vb.suggested_stake?.toFixed(2) ?? '—'}</td>
-                                    <td><span className={`badge ${STATUS_BADGE[vb.status] || 'badge-yellow'}`}>{vb.status}</span></td>
-                                    <td style={{ fontSize: '0.7rem' }}>{new Date(vb.detected_at).toLocaleString()}</td>
-                                </tr>
-
-                            ))}
-                        </tbody>
-                    </table>
+                <div className="card" style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', background: 'var(--bg-elevated)', padding: '1rem', borderBottom: '2px solid var(--border)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                        <div style={{ flex: 1 }}>Match</div>
+                        <div style={{ flex: 1.5 }}>Bookie</div>
+                        <div style={{ flex: 2 }}>Selection</div>
+                        <div style={{ flex: 1 }}>Odds</div>
+                        <div style={{ flex: 1 }}>Model</div>
+                        <div style={{ flex: 1 }}>Edge</div>
+                        <div style={{ flex: 1 }}>EV</div>
+                        <div style={{ flex: 1.5 }}>Status</div>
+                        <div style={{ flex: 2 }}>Detected</div>
+                    </div>
+                    {/* Virtualized List */}
+                    <div style={{ flex: 1 }}>
+                        <List
+                            height={500}
+                            itemCount={bets.length}
+                            itemSize={60}
+                            width="100%"
+                            itemData={bets}
+                        >
+                            {ValueBetRow}
+                        </List>
+                    </div>
                 </div>
             )}
         </div>
     );
 }
+
+
