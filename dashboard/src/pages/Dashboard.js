@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { getAnalytics, getBankroll, triggerScan, fetchLiveOdds, getTodayPredictions } from '../api';
 import { useWebSocket } from '../useWebSocket';
+import { CardSkeleton, TableSkeleton } from '../components/Skeleton';
 
 const MetricCard = React.memo(({ label, value, sub, color = 'neutral' }) => {
     return (
@@ -12,10 +13,9 @@ const MetricCard = React.memo(({ label, value, sub, color = 'neutral' }) => {
     );
 });
 
-import { CardSkeleton, TableSkeleton } from '../components/Skeleton';
-
 export default function Dashboard() {
     const [analytics, setAnalytics] = useState(null);
+
     const [bankroll, setBankroll] = useState([]);
     const [predictions, setPredictions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -78,7 +78,8 @@ export default function Dashboard() {
 
 
     const currentBalance = bankroll[0]?.balance ?? 0;
-    const roiColor = analytics?.roi >= 0 ? 'positive' : 'negative';
+
+
 
     if (loading) {
         return (

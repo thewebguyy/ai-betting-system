@@ -5,10 +5,9 @@ import {
     Chart as ChartJS, BarElement, ArcElement, Tooltip, Legend,
     CategoryScale, LinearScale,
 } from 'chart.js';
+import { CardSkeleton, ChartSkeleton } from '../components/Skeleton';
 
 ChartJS.register(BarElement, ArcElement, Tooltip, Legend, CategoryScale, LinearScale);
-
-import { CardSkeleton, ChartSkeleton } from '../components/Skeleton';
 
 export default function AnalyticsPage() {
     const [analytics, setAnalytics] = useState(null);
@@ -34,39 +33,6 @@ export default function AnalyticsPage() {
     useEffect(() => {
         load();
     }, [load]);
-
-    if (loading) return (
-        <div className="fade-in">
-            <div className="page-header">
-                <h1>Performance Analytics</h1>
-                <p>Deep dive into model accuracy and profitability</p>
-            </div>
-            <div className="grid-3 section">
-                <CardSkeleton />
-                <CardSkeleton />
-                <CardSkeleton />
-            </div>
-            <div className="grid-2">
-                <ChartSkeleton />
-                <ChartSkeleton />
-            </div>
-        </div>
-    );
-
-    if (error) return (
-        <div className="fade-in" style={{ padding: '4rem', textAlign: 'center' }}>
-            <div className="card">
-                <div className="icon" style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
-                <h2>Analytics Unavailable</h2>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem' }}>
-                    {error}
-                </p>
-                <button className="btn btn-primary" onClick={load}>🔄 Retry Connection</button>
-            </div>
-        </div>
-    );
-
-
 
     // Win/Draw/Loss doughnut
     const doughnutData = React.useMemo(() => ({
@@ -129,6 +95,40 @@ export default function AnalyticsPage() {
         { label: 'Total Staked', value: (analytics?.total_staked || 0).toFixed(2), color: 'neutral' },
         { label: 'Net Profit', value: `${(analytics?.total_profit || 0) >= 0 ? '+' : ''}${(analytics?.total_profit || 0).toFixed(2)}`, color: (analytics?.total_profit || 0) >= 0 ? 'positive' : 'negative' },
     ], [analytics]);
+
+    if (loading) return (
+        <div className="fade-in">
+            <div className="page-header">
+                <h1>Performance Analytics</h1>
+                <p>Deep dive into model accuracy and profitability</p>
+            </div>
+            <div className="grid-3 section">
+                <CardSkeleton />
+                <CardSkeleton />
+                <CardSkeleton />
+            </div>
+            <div className="grid-2">
+                <ChartSkeleton />
+                <ChartSkeleton />
+            </div>
+        </div>
+    );
+
+    if (error) return (
+        <div className="fade-in" style={{ padding: '4rem', textAlign: 'center' }}>
+            <div className="card">
+                <div className="icon" style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
+                <h2>Analytics Unavailable</h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem' }}>
+                    {error}
+                </p>
+                <button className="btn btn-primary" onClick={load}>🔄 Retry Connection</button>
+            </div>
+        </div>
+    );
+
+
+
 
 
 

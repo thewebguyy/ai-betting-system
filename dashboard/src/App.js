@@ -1,4 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { Toaster } from 'react-hot-toast';
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -116,7 +118,8 @@ function ProtectedLayout() {
     );
 }
 
-import { Toaster } from 'react-hot-toast';
+
+
 
 export default function App() {
     return (

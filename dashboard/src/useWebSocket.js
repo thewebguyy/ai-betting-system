@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 const getWsUrl = () => {
     if (process.env.REACT_APP_WS_URL) return process.env.REACT_APP_WS_URL;

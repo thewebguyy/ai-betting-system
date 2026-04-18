@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { getBankroll, addBankrollSnapshot, getBets } from '../api';
+import { getBankroll, addBankrollSnapshot } from '../api';
+
 import { Line } from 'react-chartjs-2';
 import {
     Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale,
     Filler, Tooltip, Legend,
 } from 'chart.js';
 import toast from 'react-hot-toast';
+import { CardSkeleton, ChartSkeleton } from '../components/Skeleton';
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip, Legend);
 
 
-import { CardSkeleton, ChartSkeleton } from '../components/Skeleton';
-
 export default function BankrollPage() {
     const [snapshots, setSnapshots] = useState([]);
-    const [bets, setBets] = useState([]);
+
     const [newBalance, setNewBalance] = useState('');
     const [note, setNote] = useState('');
     const [loading, setLoading] = useState(true);
@@ -23,10 +23,10 @@ export default function BankrollPage() {
     const load = async () => {
         setLoading(true);
         try {
-            const [s, b] = await Promise.all([getBankroll(30), getBets({ limit: 50 })]);
+            const s = await getBankroll(30);
             const validSnapshots = Array.isArray(s) ? s : [];
             setSnapshots([...validSnapshots].reverse()); // chronological
-            setBets(Array.isArray(b) ? b : []);
+
         } catch (err) {
             toast.error('Failed to load bankroll data');
         } finally {
