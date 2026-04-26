@@ -1,27 +1,33 @@
 import time
 import random
-import os
-from loguru import logger
-from automation.state_manager import StateManager
+from automation.base_subsystem import BaseSubsystem
 
-# Configuration
-MODE = os.environ.get("MODE", "DEVELOPMENT")
-db = StateManager()
+class AlphaDetector(BaseSubsystem):
+    def __init__(self):
+        super().__init__("ALPHA")
 
-def main_loop():
-    logger.info(f"🚀 Alpha Detection Infrastructure ONLINE (Mode: {MODE})")
-    
-    while True:
-        # Simulate signal detection for local demo
-        if random.random() < 0.15: # 15% chance per tick
-            match_id = f"M_{random.randint(1000, 9999)}"
-            alpha = random.uniform(0.04, 0.09)
+    def run(self):
+        self.log("Alpha Detector ONLINE. Polling for market shocks...")
+        
+        while True:
+            self.heartbeat()
             
-            # 1. PERSIST: Save signal to local SQLite immediately
-            sig_id = db.log_signal(match_id, alpha)
-            logger.info(f"📡 SIGNAL DETECTED: {match_id} | Alpha: {alpha:.2%} | ID: {sig_id}")
+            # Simulate Detection
+            if random.random() < 0.1:
+                match_id = f"M_{random.randint(1000, 9999)}"
+                alpha = random.uniform(0.04, 0.08)
+                
+                payload = {
+                    "match_id": match_id,
+                    "alpha": alpha,
+                    "ts_detected": time.time()
+                }
+                
+                # EMIT SIGNAL_DETECTED
+                event_id = self.bus.emit("SIGNAL_DETECTED", payload, self.name)
+                self.log(f"SIGNAL EMITTED: {match_id} (Alpha: {alpha:.2%})", event_id)
             
-        time.sleep(5) # Tick rate
+            time.sleep(5)
 
 if __name__ == "__main__":
-    main_loop()
+    AlphaDetector().run()

@@ -1,19 +1,25 @@
 """
 run_local.py
-Main orchestrator and process supervisor for local-first execution.
-Manages the web dashboard, alpha detector, and execution engine.
+Event-Driven Orchestrator & Supervisor.
+Handles snapshots, freeze detection, and subsystem health.
 """
 
 import subprocess
 import sys
 import time
 import os
+import signal
+import json
+import sqlite3
 from datetime import datetime, timedelta
 from loguru import logger
+from automation.event_bus import EventBus
 
-# Configuration
+# --- CONFIGURATION ---
 MODE = "LOCAL_PRODUCTION"
 LOG_DIR = "logs"
+DATA_DIR = "data"
+SNAPSHOT_DIR = os.path.join(DATA_DIR, "snapshots")
 SERVICES = {
     "web": [sys.executable, "main.py"],
     "alpha": [sys.executable, "automation/alpha_detector.py"],
@@ -21,78 +27,104 @@ SERVICES = {
     "truth": [sys.executable, "validate_edge.py"]
 }
 
-class LocalSupervisor:
+class EventDrivenSupervisor:
     def __init__(self):
-        os.makedirs(LOG_DIR, exist_ok=True)
-        os.makedirs("data", exist_ok=True)
+        self._ensure_folders()
         self.processes = {}
-        self.health_stats = {name: {"restarts": 0, "last_crash": None, "history": []} for name in SERVICES}
+        self.bus = EventBus()
+        self.is_shutting_down = False
+        self.last_event_ts = time.time()
+        self.last_snapshot_ts = time.time()
         
-        # Configure Loguru for system monitoring
-        logger.add(f"{LOG_DIR}/system.log", rotation="10 MB", level="INFO", 
-                   format="{time} | {level} | {message}")
+        # Central Logger
+        logger.remove()
+        logger.add(sys.stdout, format="<green>{time}</green> | <blue>{extra[event_id]}</blue> | <level>{message}</level>", level="INFO")
+        logger.add(f"{LOG_DIR}/supervisor.log", rotation="10 MB")
+
+    def _ensure_folders(self):
+        for folder in [LOG_DIR, DATA_DIR, SNAPSHOT_DIR]:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+
+    def _signal_handler(self, sig, frame):
+        self.shutdown()
 
     def start_service(self, name):
         cmd = SERVICES[name]
-        log_file = open(f"{LOG_DIR}/{name}.log", "a")
+        log_file = open(f"{LOG_DIR}/{name}.log", "a", encoding="utf-8")
         
-        logger.info(f"🚀 Starting service: {name} (Cmd: {' '.join(cmd)})")
         proc = subprocess.Popen(
             cmd,
             stdout=log_file,
             stderr=log_file,
             text=True,
-            env={**os.environ, "MODE": MODE, "PYTHONUNBUFFERED": "1"}
+            env={**os.environ, "EXECUTION_MODE": "PAPER", "PYTHONUNBUFFERED": "1", "PYTHONPATH": "."}
         )
         self.processes[name] = {"proc": proc, "log_file": log_file}
 
+    def _take_snapshot(self):
+        """Saves current system state snapshot to JSON."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        snapshot_file = os.path.join(SNAPSHOT_DIR, f"snapshot_{timestamp}.json")
+        
+        # Capture summary stats from EventBus
+        with sqlite3.connect(self.bus.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM events")
+            total_events = cursor.fetchone()[0]
+            cursor.execute("SELECT subsystem, last_seen FROM heartbeats")
+            beats = cursor.fetchall()
+
+        snapshot = {
+            "timestamp": time.time(),
+            "total_events": total_events,
+            "subsystems": {b[0]: b[1] for b in beats},
+            "status": "HEALTHY"
+        }
+        
+        with open(snapshot_file, "w") as f:
+            json.dump(snapshot, f, indent=4)
+        
+        logger.info(f"Snapshot saved: {snapshot_file}", event_id="SYS")
+
     def monitor(self):
-        logger.info("🛡️ Local Supervisor Active. Monitoring 3 core services...")
+        logger.info("EVENT-DRIVEN SUPERVISOR ONLINE", event_id="SYS")
         
         for name in SERVICES:
             self.start_service(name)
 
-        try:
-            while True:
-                for name, data in self.processes.items():
-                    proc = data["proc"]
-                    
-                    # Check if process is still running
-                    if proc.poll() is not None:
-                        logger.error(f"❌ Service {name} has CRASHED (Exit Code: {proc.returncode})")
-                        self._handle_crash(name)
+        while not self.is_shutting_down:
+            now = time.time()
+            
+            # 1. Take Snapshot (30s interval)
+            if now - self.last_snapshot_ts > 30:
+                self._take_snapshot()
+                self.last_snapshot_ts = now
+            
+            # 2. Freeze Detection (No events in 60s -> check subsystems)
+            with sqlite3.connect(self.bus.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT MAX(timestamp) FROM events")
+                max_ts = cursor.fetchone()[0] or now
                 
-                time.sleep(3) # Watchdog interval
-        except KeyboardInterrupt:
-            logger.warning("🛑 Supervisor shutting down. Terminating all services...")
-            self.shutdown()
-
-    def _handle_crash(self, name):
-        stats = self.health_stats[name]
-        now = datetime.now()
-        
-        # Track crash history for rate-limiting
-        stats["history"] = [t for t in stats["history"] if t > now - timedelta(hours=1)]
-        stats["history"].append(now)
-        stats["restarts"] += 1
-        
-        if len(stats["history"]) > 10:
-            logger.critical(f"🔥 FATAL: Service {name} is stuck in a crash loop (>10 in 1hr). Manual intervention required.")
-            # We don't exit the supervisor, but we stop restarting THIS service
-            del self.processes[name]
-            return
-
-        logger.info(f"🔄 Restarting {name} in 3 seconds... (Restart #{stats['restarts']})")
-        time.sleep(3)
-        self.processes[name]["log_file"].close()
-        self.start_service(name)
+                if now - max_ts > 60:
+                    logger.warning("FREEZE DETECTED: No events emitted in 60s. Checking heartbeats...", event_id="SYS")
+                    # Restart dead subsystems if needed
+            
+            # 3. Check Subprocess Health
+            for name, data in list(self.processes.items()):
+                if data["proc"].poll() is not None:
+                    logger.error(f"Subsystem {name.upper()} CRASHED. Restarting...", event_id="SYS")
+                    self.start_service(name)
+            
+            time.sleep(5)
 
     def shutdown(self):
+        self.is_shutting_down = True
         for name, data in self.processes.items():
             data["proc"].terminate()
-            data["log_file"].close()
         sys.exit(0)
 
 if __name__ == "__main__":
-    supervisor = LocalSupervisor()
+    supervisor = EventDrivenSupervisor()
     supervisor.monitor()

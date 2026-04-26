@@ -1,0 +1,10 @@
+{
+    "timestamp": 1777244815.4071217,
+    "total_events": 20,
+    "subsystems": {
+        "ALPHA": 1777244810.8436563,
+        "EXECUTOR": 1777244814.9149644,
+        "TRUTH": 1777244815.1294003
+    },
+    "status": "HEALTHY"
+}

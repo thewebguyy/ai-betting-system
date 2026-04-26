@@ -1,46 +1,36 @@
 import time
-import sqlite3
 import os
-from loguru import logger
-from automation.state_manager import StateManager
+from automation.base_subsystem import BaseSubsystem
 
-# Configuration
-MODE = os.environ.get("MODE", "DEVELOPMENT")
-db = StateManager()
+class ExecutionEngine(BaseSubsystem):
+    def __init__(self):
+        super().__init__("EXECUTOR")
 
-def execution_loop():
-    logger.info(f"💸 Execution Engine ONLINE (Mode: {MODE})")
-    
-    while True:
-        try:
-            # 0. CHECK TRUTH KILL SWITCH
-            if os.path.exists("data/kill_switch.flag"):
-                with open("data/kill_switch.flag", "r") as f:
-                    if f.read().strip() == "OFF":
-                        logger.critical("🚫 EXECUTION INHIBITED: Truth Layer detected NO EDGE. Staying in Paper Mode.")
-                        time.sleep(10)
-                        continue
-
-            # 1. READ: Check for pending signals in SQLite
-            with sqlite3.connect(db.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, match_id, alpha FROM signals WHERE status = 'DETECTED' LIMIT 1")
-                row = cursor.fetchone()
+    def run(self):
+        self.log(f"Execution Engine ONLINE. Mode: {self.execution_mode}")
+        
+        while True:
+            self.heartbeat()
+            
+            # 1. Listen for SIGNAL_DETECTED
+            new_events = self.bus.subscribe("SIGNAL_DETECTED", self.last_event_id)
+            
+            for eid, event_id, topic, payload_str, source in new_events:
+                self.last_event_id = eid
+                import json
+                payload = json.loads(payload_str)
                 
-                if row:
-                    sig_id, match_id, alpha = row
-                    
-                    # 2. EXECUTE: (Mock logic for local demo)
-                    logger.success(f"🔨 EXECUTING SIGNAL {sig_id}: {match_id} (Alpha: {alpha:.2%})")
-                    
-                    # 3. UPDATE: Persist result
-                    db.log_bet(sig_id, 500.0, "SUCCESS")
-                    cursor.execute("UPDATE signals SET status = 'EXECUTED' WHERE id = ?", (sig_id,))
-                    conn.commit()
-        except Exception as e:
-            logger.error(f"❌ Execution Error: {e}")
+                # 2. Hard Execution Guardrail
+                if self.execution_mode == "PAPER":
+                    self.log(f"PAPER BET: Simulating entry for {payload['match_id']}", event_id)
+                elif self.execution_mode == "LIVE":
+                    # Real execution logic would go here
+                    self.log(f"LIVE BET: Executing REAL trade for {payload['match_id']}", event_id, "WARNING")
                 
-        time.sleep(2) # High-frequency polling
+                # EMIT EXECUTION_COMPLETE
+                self.bus.emit("EXECUTION_COMPLETE", {"match_id": payload['match_id'], "mode": self.execution_mode}, self.name)
+            
+            time.sleep(2)
 
 if __name__ == "__main__":
-    execution_loop()
+    ExecutionEngine().run()
