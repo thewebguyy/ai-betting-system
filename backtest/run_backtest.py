@@ -48,8 +48,16 @@ async def run_backtest(leagues: list, seasons: list):
     download_sample_data(data_dir)
     
     loader = DataLoader(data_dir)
+    from experiments.config import ExperimentConfig
+    config = ExperimentConfig(
+        name="Standard_Backtest",
+        initial_bankroll=1000.0,
+        kelly_fraction=0.25,
+        ev_threshold=-0.5,
+        min_warmup_matches=0 # Setting to 0 for the demo tail(50)
+    )
+    simulator = BettingSimulator(config)
     runner = BacktestModelRunner()
-    simulator = BettingSimulator(initial_bankroll=1000.0, kelly_fraction=0.25)
     
     # We combine all matches into one timeline
     all_matches = []
@@ -67,10 +75,18 @@ async def run_backtest(leagues: list, seasons: list):
     
     logger.info(f"🚀 Starting backtest on {len(full_timeline)} matches...")
     
+    current_date = None
     for i, (_, row) in enumerate(full_timeline.iterrows()):
         if i % 10 == 0:
             logger.info(f"Processing match {i}/{len(full_timeline)}...")
+        
         match_dict = row.to_dict()
+        match_date = str(match_dict['date'])
+        
+        # New day starts? Finalize previous day's bets
+        if current_date and match_date != current_date:
+            simulator.finalize_day(current_date)
+        current_date = match_date
         
         # 1. Predict (uses current model state)
         preds = runner.predict_match(match_dict['home_team'], match_dict['away_team'])
@@ -86,6 +102,10 @@ async def run_backtest(leagues: list, seasons: list):
             match_dict['away_goals']
         )
 
+    # Finalize the very last day
+    if current_date:
+        simulator.finalize_day(current_date)
+
     # Output Results
     history_df = simulator.get_history_df()
     metrics = calculate_metrics(history_df, 1000.0)
@@ -97,6 +117,11 @@ async def run_backtest(leagues: list, seasons: list):
         print(f"{k:<20}: {v}")
     print("="*40)
     
+    # New CLV Diagnostics
+    from backtest.clv_analyzer import analyze_clv, print_clv_report
+    clv_report = analyze_clv(history_df)
+    print_clv_report(clv_report)
+
     # Save detailed log
     if not history_df.empty:
         log_path = "backtest/backtest_results.csv"

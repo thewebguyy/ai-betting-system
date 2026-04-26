@@ -23,17 +23,8 @@ class BettingSimulator:
         Evaluate if a bet should be placed.
         Instead of immediate execution, we store potential bets per day to apply caps later.
         """
-        # 1. Warm-up filter
-        h_count = predictions.get('home_match_count', 0) # Need to ensure these are passed
-        a_count = predictions.get('away_match_count', 0)
-        
-        # We need to get these counts from the runner or the prediction dict
-        # Updating ensemble_predict earlier didn't include these in the return dict 
-        # unless they were passed in. Let's assume they are there.
-        
-        if (predictions.get('home_match_count', 0) < self.config.min_warmup_matches or 
-            predictions.get('away_match_count', 0) < self.config.min_warmup_matches):
-            return
+        # Warm-up filter removed for diagnostic demo
+        pass
 
         odds_map = {'home': match['odds_h'], 'draw': match['odds_d'], 'away': match['odds_a']}
         
@@ -44,16 +35,22 @@ class BettingSimulator:
             prob = predictions[market]
             odds = odds_map[market]
             ev = (prob * odds) - 1
+            # logger.warning(f"MATCH: {match['home_team']} vs {match['away_team']} | {market} | EV: {ev:.4f}")
             
             # Track calibration for ALL predictions we consider
             actual_res = 'home' if match['result'] == 'H' else ('draw' if match['result'] == 'D' else 'away')
             self.calibrator.add_data(prob, (market == actual_res))
+
+            # Segment Filter Check
+            if not (self.config.min_prob <= prob <= self.config.max_prob):
+                continue
 
             if ev > self.config.ev_threshold and ev > max_ev:
                 max_ev = ev
                 best_market = market
 
         if best_market:
+            # logger.warning(f"SELECT: {best_market} (EV {max_ev:.4f})")
             date_key = str(match['date'])
             if date_key not in self.daily_bets:
                 self.daily_bets[date_key] = []
@@ -89,9 +86,15 @@ class BettingSimulator:
         
         actual_res = 'home' if match['result'] == 'H' else ('draw' if match['result'] == 'D' else 'away')
         
-        # Kelly
-        raw_kelly = (prob * odds - 1) / (odds - 1)
-        stake_pct = max(0, min(0.15, raw_kelly * self.config.kelly_fraction))
+        # 1. Staking Strategy
+        if self.config.staking_method == "flat":
+            stake_pct = self.config.flat_stake_pct
+        else:
+            # Kelly: (p*b - q) / b  where b = odds-1
+            raw_kelly = (prob * odds - 1) / (odds - 1)
+            # Apply fractional Kelly and cap at 15% to prevent total ruin on single bets
+            stake_pct = max(0, min(0.15, raw_kelly * self.config.kelly_fraction))
+            
         stake_amt = self.bankroll * stake_pct
         
         is_win = (market == actual_res)

@@ -14,6 +14,10 @@ class ExperimentConfig:
     max_bets_per_day: Optional[int] = None
     kelly_fraction: float = 0.25
     initial_bankroll: float = 1000.0
+    min_prob: float = 0.0
+    max_prob: float = 1.0
+    staking_method: str = "kelly" # "kelly" or "flat"
+    flat_stake_pct: float = 0.02 # 2% if flat
 
 # Standard Experiment Presets
 EXPERIMENTS = [
