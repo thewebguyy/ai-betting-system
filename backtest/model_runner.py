@@ -32,7 +32,7 @@ class BacktestModelRunner:
             self.teams[name] = TeamState(name)
         return self.teams[name]
 
-    def predict_match(self, home_name: str, away_name: str) -> dict:
+    def predict_match(self, home_name: str, away_name: str, use_calibration: bool = False) -> dict:
         """Predict match using current state BEFORE match is played."""
         h = self.get_team(home_name)
         a = self.get_team(away_name)
@@ -51,7 +51,8 @@ class BacktestModelRunner:
             away_match_count=a.matches_played,
             home_form=None,
             away_form=None,
-            n_simulations=50
+            n_simulations=50,
+            use_calibration=use_calibration
         )
         res['home_match_count'] = h.matches_played
         res['away_match_count'] = a.matches_played

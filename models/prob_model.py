@@ -309,6 +309,7 @@ def ensemble_predict(
     away_match_count: int = 0,
     weather_str: str = "",
     n_simulations: int = 2000,
+    use_calibration: bool = False
 ) -> dict:
     """
     Blended prediction combining ELO, Dixon-Coles Poisson, and Monte Carlo.
@@ -354,16 +355,17 @@ def ensemble_predict(
     p_h, p_d, p_a = p_h / total, p_d / total, p_a / total
 
     # 4.5. Calibration (Platt Scaling)
-    try:
-        from models.calibrator import ProbabilityCalibrator
-        cal = ProbabilityCalibrator(method='logistic')
-        if cal.load("epl_ensemble"):
-            # Calibrator expects Away, Draw, Home order [index 0, 1, 2]
-            cal_probs = cal.calibrate(np.array([p_a, p_d, p_h]))
-            p_a, p_d, p_h = cal_probs[0], cal_probs[1], cal_probs[2]
-            logger.debug("Applied logistic calibration to ensemble.")
-    except Exception as e:
-        logger.warning(f"Calibration failed: {e}")
+    if use_calibration:
+        try:
+            from models.calibrator import ProbabilityCalibrator
+            cal = ProbabilityCalibrator(method='logistic')
+            if cal.load("epl_ensemble"):
+                # Calibrator expects Away, Draw, Home order [index 0, 1, 2]
+                cal_probs = cal.calibrate(np.array([p_a, p_d, p_h]))
+                p_a, p_d, p_h = cal_probs[0], cal_probs[1], cal_probs[2]
+                logger.debug("Applied logistic calibration to ensemble.")
+        except Exception as e:
+            logger.warning(f"Calibration failed: {e}")
 
     # 5. Secondary Markets (using lambdas)
     p_over, p_under = ou_probability(lh, la, line=2.5)
