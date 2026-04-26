@@ -23,7 +23,10 @@ COLUMNS = {
     'B365<2.5': 'odds_under',
     'PSCH': 'closing_odds_h',
     'PSCD': 'closing_odds_d',
-    'PSCA': 'closing_odds_a'
+    'PSCA': 'closing_odds_a',
+    'PSH': 'opening_odds_h',
+    'PSD': 'opening_odds_d',
+    'PSA': 'opening_odds_a'
 }
 
 class DataLoader:

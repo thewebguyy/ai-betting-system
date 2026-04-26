@@ -1,0 +1,2 @@
+signal_id,match_id,source_type,confidence_score,timestamp_detected,odds_at_detection,odds_t_plus_1m,odds_t_plus_5m,odds_closing,clv_at_closing,classification
+sig_001,m_123,news,90.0,1777212299.9854853,2.1,2.05,1.95,1.9,0.10526315789473695,TRUE_EDGE
