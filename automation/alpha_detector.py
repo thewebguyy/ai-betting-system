@@ -1,80 +1,27 @@
-"""
-automation/alpha_detector.py
-Core logic for detecting informational alpha and market anomalies in real-time.
-"""
-
 import time
-from typing import Dict, List, Optional
+import random
+import os
 from loguru import logger
+from automation.state_manager import StateManager
 
-class AlphaSignal:
-    def __init__(self, match_id: str, team: str, signal_type: str, score: float):
-        self.match_id = match_id
-        self.team = team
-        self.signal_type = signal_type # "NEWS_SHOCK", "MARKET_ANOMALY"
-        self.score = score
-        self.timestamp = time.time()
-
-class MarketAnomalyDetector:
-    """
-    Monitors streaming odds and detects price movements 
-    that suggest sharp action or un-priced news.
-    """
-    def __init__(self, threshold_prob_shift: float = 0.03):
-        self.threshold = threshold_prob_shift
-        self.odds_history = {} # match_id -> last_prob
-
-    def check_move(self, match_id: str, current_odds: float) -> Optional[float]:
-        current_prob = 1.0 / current_odds
-        
-        if match_id in self.odds_history:
-            prev_prob = self.odds_history[match_id]
-            delta = current_prob - prev_prob
-            
-            if abs(delta) >= self.threshold:
-                logger.warning(f"🚨 ANOMALY: Match {match_id} shifted {delta:+.2%}!")
-                return delta
-        
-        self.odds_history[match_id] = current_prob
-        return None
-
-class NewsAlphaEngine:
-    """
-    Cross-references raw news signals against market states 
-    to classify 'Lead-Time Alpha'.
-    """
-    def __init__(self):
-        self.processed_news = set()
-
-    def evaluate_news(self, news_text: str, current_market_state: dict) -> Optional[AlphaSignal]:
-        # NLP logic would go here to extract entities
-        # For demo: Simple keyword detection
-        keywords = ["INJURY", "LINEUP", "OUT", "BENCHED"]
-        
-        for kw in keywords:
-            if kw in news_text.upper():
-                logger.info(f"🔍 High-impact News detected: {news_text[:50]}...")
-                # Calculate alpha strength based on how much the market HASN'T moved yet
-                return AlphaSignal(
-                    match_id=current_market_state['id'],
-                    team=current_market_state['team'],
-                    signal_type="NEWS_SHOCK",
-                    score=85.0 # Logic: High score if market is static
-                )
-        return None
+# Configuration
+MODE = os.environ.get("MODE", "DEVELOPMENT")
+db = StateManager()
 
 def main_loop():
-    logger.info("🚀 Alpha Detection Infrastructure ONLINE.")
-    # In production, this would be connected to WebSockets for Odds and Social Scrapers
-    detector = MarketAnomalyDetector()
-    engine = NewsAlphaEngine()
+    logger.info(f"🚀 Alpha Detection Infrastructure ONLINE (Mode: {MODE})")
     
-    # Mock loop
     while True:
-        # 1. Poll scrapers
-        # 2. Poll odds
-        # 3. Correlate
-        time.sleep(10)
+        # Simulate signal detection for local demo
+        if random.random() < 0.15: # 15% chance per tick
+            match_id = f"M_{random.randint(1000, 9999)}"
+            alpha = random.uniform(0.04, 0.09)
+            
+            # 1. PERSIST: Save signal to local SQLite immediately
+            sig_id = db.log_signal(match_id, alpha)
+            logger.info(f"📡 SIGNAL DETECTED: {match_id} | Alpha: {alpha:.2%} | ID: {sig_id}")
+            
+        time.sleep(5) # Tick rate
 
 if __name__ == "__main__":
     main_loop()
