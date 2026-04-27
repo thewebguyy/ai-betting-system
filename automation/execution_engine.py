@@ -15,20 +15,21 @@ class ExecutionEngine(BaseSubsystem):
             # 1. Listen for SIGNAL_DETECTED
             new_events = self.bus.subscribe("SIGNAL_DETECTED", self.last_event_id)
             
-            for eid, event_id, topic, payload_str, source in new_events:
+            for eid, event_id, topic, payload_str in new_events:
                 self.last_event_id = eid
                 import json
                 payload = json.loads(payload_str)
                 
                 # 2. Hard Execution Guardrail
+                source = payload.get("source_name", "UNKNOWN")
                 if self.execution_mode == "PAPER":
-                    self.log(f"PAPER BET: Simulating entry for {payload['match_id']}", event_id)
+                    self.log(f"PAPER BET: Simulating entry for {payload['match_id']} via {source}", event_id)
                 elif self.execution_mode == "LIVE":
                     # Real execution logic would go here
-                    self.log(f"LIVE BET: Executing REAL trade for {payload['match_id']}", event_id, "WARNING")
+                    self.log(f"LIVE BET: Executing REAL trade for {payload['match_id']} via {source}", event_id, "WARNING")
                 
                 # EMIT EXECUTION_COMPLETE
-                self.bus.emit("EXECUTION_COMPLETE", {"match_id": payload['match_id'], "mode": self.execution_mode}, self.name)
+                self.bus.emit("EXECUTION_COMPLETE", {"match_id": payload['match_id'], "mode": self.execution_mode}, self.name, priority="CRITICAL")
             
             time.sleep(2)
 
